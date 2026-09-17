@@ -630,6 +630,16 @@ function currentPhotoList() {
   return AppState.media.filter((m) => m.childId === AppState.activeChildId && !m.hidden && (filter === "all" || m.categoryId === filter));
 }
 
+function navigatePhotoBy(dir) {
+  const list = currentPhotoList();
+  const next = AppState.childPhotoIndex + dir;
+  if (next >= 0 && next < list.length) {
+    AppState.childPhotoIndex = next;
+    logUsage("photos", (list[next] || {}).name || "");
+    render();
+  }
+}
+
 function renderChildPhotoViewer() {
   const list = currentPhotoList();
   const item = list[AppState.childPhotoIndex];
@@ -1474,16 +1484,7 @@ const Actions = {
     render();
   },
   childPhotoBackToGrid() { AppState.childView = "photos"; render(); },
-  childPhotoNav(el) {
-    const dir = parseInt(el.dataset.dir, 10);
-    const list = currentPhotoList();
-    const next = AppState.childPhotoIndex + dir;
-    if (next >= 0 && next < list.length) {
-      AppState.childPhotoIndex = next;
-      logUsage("photos", (list[next] || {}).name || "");
-      render();
-    }
-  },
+  childPhotoNav(el) { navigatePhotoBy(parseInt(el.dataset.dir, 10)); },
   childVoiceCategory(el) { AppState.voiceCategory = el.dataset.cat; render(); },
 
   tapVoiceButton(el) {
@@ -1985,6 +1986,26 @@ document.addEventListener("input", (e) => {
     InputActions[el.dataset.actionInput](el, e);
   }
 });
+
+// Swipe through the photo/video viewer: swipe right for the next item,
+// swipe left to go back. The Previous/Next buttons stay too, as a
+// no-gesture-required alternative (some children can't reliably swipe).
+const SWIPE_THRESHOLD_PX = 50;
+let swipeStart = null;
+document.addEventListener("touchstart", (e) => {
+  const viewer = e.target.closest(".viewer-media");
+  if (!viewer || e.touches.length !== 1) { swipeStart = null; return; }
+  swipeStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+}, { passive: true });
+document.addEventListener("touchend", (e) => {
+  if (!swipeStart) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - swipeStart.x;
+  const dy = t.clientY - swipeStart.y;
+  swipeStart = null;
+  if (Math.abs(dx) < SWIPE_THRESHOLD_PX || Math.abs(dx) < Math.abs(dy)) return;
+  navigatePhotoBy(dx > 0 ? 1 : -1);
+}, { passive: true });
 
 // Best-effort back-button trap while Child Mode is active.
 window.addEventListener("popstate", () => {
