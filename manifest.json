@@ -1,0 +1,19 @@
+{
+  "name": "My Voice and Safe Space",
+  "short_name": "My Voice",
+  "description": "A private, parent-managed communication and sensory-support space.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#eaf4ff",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
