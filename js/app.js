@@ -1343,7 +1343,12 @@ const Actions = {
   },
 
   /* Onboarding (create a child profile) */
-  onboardEmoji(el) { AppState.child.emoji = el.dataset.val; render(); },
+  onboardEmoji(el) {
+    const nameInput = document.getElementById("ob-name");
+    if (nameInput) AppState.child.name = nameInput.value;
+    AppState.child.emoji = el.dataset.val;
+    render();
+  },
   onboardSaveName() {
     const val = document.getElementById("ob-name").value.trim();
     AppState.child.name = val;
