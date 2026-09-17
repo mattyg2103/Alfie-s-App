@@ -38,7 +38,7 @@ function defaultState() {
       animationsEnabled: true,
       confirmSelections: false,
       selectionDelayMs: 0,
-      sentenceBuilderEnabled: true,
+      sentenceBuilderEnabled: false,
       videoAutoplay: false,
       videoLoop: false,
       videoMaxDurationSec: 30,
