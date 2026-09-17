@@ -446,7 +446,6 @@ function render() {
   root.innerHTML = html;
   hydrateMediaEls();
   document.body.style.backgroundColor = AppState.settings.bgColor;
-  document.body.classList.toggle("child-mode-bg", !booting && AppState.mode === "child");
 }
 
 function renderLoading() {
