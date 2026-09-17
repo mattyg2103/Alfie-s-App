@@ -38,6 +38,41 @@ capture, and microphone recording to work.
 On a tablet, open the site in Safari/Chrome and use "Add to Home Screen"
 so it launches full-screen like an app.
 
+## Deploying to Render
+
+This is a static site (no build step, no backend), so it fits Render's
+free **Static Site** service directly, and gets HTTPS automatically —
+which this app needs for PIN hashing, camera capture and microphone
+recording to work.
+
+**Option A — Dashboard (no YAML needed):**
+
+1. Push this repo to GitHub (already done if you're reading this from the repo).
+2. In the [Render dashboard](https://dashboard.render.com), click **New +** → **Static Site**.
+3. Connect this GitHub repository.
+4. Leave **Build Command** empty (there's nothing to build).
+5. Set **Publish Directory** to `.` (the repo root, where `index.html` lives).
+6. Click **Create Static Site**. Render will give you a URL like
+   `https://my-voice-safe-space.onrender.com`.
+
+**Option B — Blueprint (`render.yaml`):**
+
+This repo includes a `render.yaml` at the root. In the Render dashboard,
+click **New +** → **Blueprint**, connect this repository, and Render will
+read `render.yaml` and provision the static site automatically using the
+same settings as Option A. If Render's Blueprint schema has changed since
+this was written and the sync fails, fall back to Option A — it takes
+about a minute either way.
+
+**After it's deployed:**
+
+- Every push to this branch auto-redeploys (`autoDeploy: true`).
+- Open the Render URL on the tablet you'll actually use, and "Add to Home
+  Screen" so it behaves like an installed app.
+- Because it's real HTTPS (not an embedded preview), camera capture,
+  microphone voice recording, and offline mode (service worker) all work
+  fully — unlike the sandboxed artifact demo shared earlier in this chat.
+
 ## What's implemented (MVP)
 
 - Onboarding: child's name/icon, and a 4-digit parent PIN.

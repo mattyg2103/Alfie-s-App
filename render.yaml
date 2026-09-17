@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: my-voice-safe-space
+    env: static
+    buildCommand: ""
+    staticPublishPath: .
+    autoDeploy: true
+    headers:
+      - path: /index.html
+        name: Cache-Control
+        value: no-cache
+      - path: /sw.js
+        name: Cache-Control
+        value: no-cache
