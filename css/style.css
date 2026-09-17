@@ -63,10 +63,17 @@ img, video { -webkit-user-drag: none; user-select: none; }
 .home-tile:active { transform: scale(0.97); }
 .greeting { font-size: 28px; font-weight: 700; text-align: center; }
 
-.hidden-unlock-spot {
-  position: fixed; bottom: 10px; right: 10px; width: 34px; height: 34px;
-  border-radius: 50%; background: rgba(0,0,0,0.06); border: none; opacity: 0.35;
-  z-index: 50;
+.parent-access-btn {
+  position: fixed; bottom: 14px; right: 14px; width: 48px; height: 48px;
+  border-radius: 50%; background: rgba(15,23,42,0.55); color: white; border: none;
+  opacity: 0.45; font-size: 18px; display: flex; align-items: center; justify-content: center;
+  z-index: 50; transition: opacity 0.15s, transform 0.15s;
+}
+.parent-access-btn:active { opacity: 0.8; transform: scale(0.92); }
+
+.link-btn {
+  background: none; border: none; color: var(--accent); text-decoration: underline;
+  font: inherit; cursor: pointer; padding: 0;
 }
 
 /* ---------- Grids ---------- */

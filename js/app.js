@@ -7,10 +7,12 @@ const MVSS_STATE_KEY = "mvss_state_v1";
 
 function defaultState() {
   return {
-    onboarded: false,
+    account: { token: null, email: null },
+    children: [],
+    activeChildId: null,
     child: { name: "", emoji: "🧒" },
     security: { pinHash: null, pinSalt: null },
-    mode: "parent",
+    mode: "auth",
     dashTab: "profile",
     childView: "home",
     childPhotoCategory: "all",
@@ -57,14 +59,17 @@ function defaultState() {
     wordsActions: mvssDefaultWordsActions(),
     usageHistoryEnabled: false,
     usageHistory: [],
-    approvedDevices: [{ id: mvssUid("dev"), name: "This device", addedAt: Date.now() }],
   };
 }
+
+const PROFILE_KEYS = ["child", "security", "settings", "childModeConfig", "photoCategories", "voiceCategories", "wordsActions", "usageHistoryEnabled", "usageHistory"];
 
 let AppState = loadState();
 let ActiveRecording = null;
 let pinFailCount = 0;
 let lastSelectionTs = 0;
+let parentAccessTapTimes = [];
+let profilePushTimer = null;
 
 function loadState() {
   try {
@@ -87,10 +92,14 @@ function loadState() {
     );
     merged.child = Object.assign({}, base.child, saved.child || {});
     merged.security = Object.assign({}, base.security, saved.security || {});
-    // Always boot back into parent mode / dashboard so nobody gets stuck.
-    merged.mode = "parent";
-    merged.dashTab = "profile";
+    merged.account = Object.assign({}, base.account, saved.account || {});
+    merged.children = Array.isArray(saved.children) ? saved.children : [];
+    merged.activeChildId = saved.activeChildId || null;
     merged.sentenceStrip = [];
+    merged.showUnlockModal = false;
+    merged.showDeleteAccountModal = false;
+    // The actual mode (auth / picker / onboard-child / child / parent) is
+    // decided by boot(), which re-checks the account with the server.
     return merged;
   } catch (e) {
     console.error("Failed to load saved data, starting fresh.", e);
@@ -110,7 +119,153 @@ function saveState() {
 
 function persistAndRender() {
   saveState();
+  schedulePushProfile();
   render();
+}
+
+/* =========================================================================
+   BACKEND API (account + child profile/settings sync only — never media)
+   ========================================================================= */
+const API_BASE = "https://my-voice-safe-space-api.onrender.com";
+
+class ApiError extends Error {
+  constructor(message, status, offline) {
+    super(message);
+    this.status = status;
+    this.offline = !!offline;
+  }
+}
+
+async function apiRequest(path, options) {
+  const opts = Object.assign({}, options);
+  opts.headers = Object.assign({ "Content-Type": "application/json" }, (options || {}).headers);
+  if (AppState.account.token) opts.headers.Authorization = "Bearer " + AppState.account.token;
+  let res;
+  try {
+    res = await fetch(API_BASE + path, opts);
+  } catch (e) {
+    throw new ApiError("You appear to be offline.", 0, true);
+  }
+  let body = null;
+  try {
+    body = await res.json();
+  } catch (e) {
+    /* no JSON body */
+  }
+  if (!res.ok) throw new ApiError((body && body.error) || "Something went wrong.", res.status);
+  return body;
+}
+
+const apiRegister = (email, password) => apiRequest("/api/auth/register", { method: "POST", body: JSON.stringify({ email, password }) });
+const apiLogin = (email, password) => apiRequest("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+const apiDeleteAccount = () => apiRequest("/api/auth/me", { method: "DELETE" });
+const apiListChildren = () => apiRequest("/api/children").then((r) => r.children);
+const apiCreateChild = (name, data) => apiRequest("/api/children", { method: "POST", body: JSON.stringify({ name, data }) }).then((r) => r.child);
+const apiUpdateChild = (id, patch) => apiRequest("/api/children/" + id, { method: "PUT", body: JSON.stringify(patch) }).then((r) => r.child);
+const apiDeleteChild = (id) => apiRequest("/api/children/" + id, { method: "DELETE" });
+
+function buildProfileSnapshot() {
+  const snap = {};
+  PROFILE_KEYS.forEach((k) => (snap[k] = AppState[k]));
+  return snap;
+}
+
+function loadChildIntoProfile(child) {
+  const fresh = defaultState();
+  const data = child.data || {};
+  AppState.settings = Object.assign({}, fresh.settings, data.settings || {});
+  AppState.childModeConfig = Object.assign({}, fresh.childModeConfig, data.childModeConfig || {});
+  AppState.childModeConfig.sectionsVisible = Object.assign({}, fresh.childModeConfig.sectionsVisible, (data.childModeConfig || {}).sectionsVisible || {});
+  AppState.childModeConfig.sectionLabels = Object.assign({}, fresh.childModeConfig.sectionLabels, (data.childModeConfig || {}).sectionLabels || {});
+  AppState.child = Object.assign({}, fresh.child, { name: child.name }, data.child || {});
+  AppState.security = Object.assign({}, fresh.security, data.security || {});
+  AppState.photoCategories = data.photoCategories || fresh.photoCategories;
+  AppState.voiceCategories = data.voiceCategories || fresh.voiceCategories;
+  AppState.wordsActions = data.wordsActions || fresh.wordsActions;
+  AppState.usageHistoryEnabled = data.usageHistoryEnabled || false;
+  AppState.usageHistory = data.usageHistory || [];
+  AppState.activeChildId = child.id;
+}
+
+function resetProfileFieldsForNewChild() {
+  const fresh = defaultState();
+  PROFILE_KEYS.forEach((k) => (AppState[k] = fresh[k]));
+}
+
+function schedulePushProfile() {
+  if (!AppState.account.token || !AppState.activeChildId) return;
+  clearTimeout(profilePushTimer);
+  profilePushTimer = setTimeout(flushProfilePush, 1200);
+}
+
+async function flushProfilePush() {
+  clearTimeout(profilePushTimer);
+  if (!AppState.account.token || !AppState.activeChildId) return;
+  try {
+    const updated = await apiUpdateChild(AppState.activeChildId, { name: AppState.child.name || "Child", data: buildProfileSnapshot() });
+    const idx = AppState.children.findIndex((c) => c.id === AppState.activeChildId);
+    if (idx >= 0) AppState.children[idx] = updated;
+  } catch (e) {
+    console.error("Could not sync to the server (will retry on the next change).", e);
+  }
+}
+
+/* =========================================================================
+   BOOT — decides auth / picker / onboarding / child / parent on launch
+   ========================================================================= */
+async function boot() {
+  if (!AppState.account.token) {
+    AppState.mode = "auth";
+    render();
+    return;
+  }
+  render();
+  await bootAfterAuth();
+}
+
+async function bootAfterAuth() {
+  try {
+    const children = await apiListChildren();
+    AppState.children = children;
+    if (AppState.activeChildId) {
+      const match = children.find((c) => c.id === AppState.activeChildId);
+      if (match) loadChildIntoProfile(match);
+      else AppState.activeChildId = null;
+    }
+    if (AppState.activeChildId) {
+      AppState.mode = "child";
+      AppState.childView = AppState.childModeConfig.lockToSingleSection || "home";
+    } else if (children.length === 1) {
+      loadChildIntoProfile(children[0]);
+      AppState.mode = "child";
+      AppState.childView = AppState.childModeConfig.lockToSingleSection || "home";
+    } else if (children.length === 0) {
+      resetProfileFieldsForNewChild();
+      AppState.mode = "onboard-child";
+      AppState.onboardingStep = 2;
+    } else {
+      AppState.mode = "picker";
+    }
+    saveState();
+    render();
+  } catch (e) {
+    if (e.status === 401) {
+      AppState.account = { token: null, email: null };
+      AppState.children = [];
+      AppState.activeChildId = null;
+      AppState.mode = "auth";
+      AppState.authError = "Your session has expired. Please sign in again.";
+    } else if (AppState.activeChildId) {
+      // Offline: keep using the cached profile already on this device.
+      AppState.mode = "child";
+      AppState.childView = AppState.childModeConfig.lockToSingleSection || "home";
+    } else {
+      AppState.mode = "auth";
+      AppState.authError = "Could not reach the server. Please check your connection and try again.";
+    }
+    saveState();
+    render();
+  }
 }
 
 /* =========================================================================
@@ -150,6 +305,55 @@ async function verifyPin(pin) {
   if (!AppState.security.pinHash) return true;
   const hash = await sha256Hex(AppState.security.pinSalt + ":" + pin);
   return hash === AppState.security.pinHash;
+}
+
+/* ---- Optional biometric (Face ID / Touch ID / fingerprint) unlock ----
+   This is a device-local convenience gate, not a server-verified login:
+   the OS itself withholds the credential until the biometric check
+   passes, which is the actual security property we rely on. */
+function bufToBase64(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)));
+}
+function base64ToBuf(b64) {
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return arr.buffer;
+}
+
+async function enrollBiometricCredential() {
+  if (!window.PublicKeyCredential) throw new Error("Face/Touch ID is not supported in this browser.");
+  const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+  if (!available) throw new Error("This device has no Face ID, Touch ID or fingerprint sensor available to the browser.");
+  const challenge = crypto.getRandomValues(new Uint8Array(32));
+  const userId = crypto.getRandomValues(new Uint8Array(16));
+  const cred = await navigator.credentials.create({
+    publicKey: {
+      challenge,
+      rp: { name: "My Voice and Safe Space" },
+      user: { id: userId, name: AppState.account.email || "parent", displayName: AppState.account.email || "Parent" },
+      pubKeyCredParams: [
+        { type: "public-key", alg: -7 },
+        { type: "public-key", alg: -257 },
+      ],
+      authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required" },
+      timeout: 60000,
+    },
+  });
+  return bufToBase64(cred.rawId);
+}
+
+async function verifyBiometricCredential(credentialIdBase64) {
+  const challenge = crypto.getRandomValues(new Uint8Array(32));
+  await navigator.credentials.get({
+    publicKey: {
+      challenge,
+      allowCredentials: [{ id: base64ToBuf(credentialIdBase64), type: "public-key" }],
+      userVerification: "required",
+      timeout: 60000,
+    },
+  });
+  return true;
 }
 
 /* =========================================================================
@@ -221,18 +425,15 @@ function render() {
   applyTheme();
   const root = document.getElementById("app");
   let html;
-  if (!AppState.onboarded) {
-    html = renderOnboarding();
-  } else if (AppState.mode === "child") {
-    html = renderChildMode(false);
-  } else {
-    html = renderParentDashboard();
-  }
+  if (AppState.mode === "auth") html = renderAuthScreen();
+  else if (AppState.mode === "onboard-child") html = renderOnboarding();
+  else if (AppState.mode === "picker") html = renderChildPicker();
+  else if (AppState.mode === "child") html = renderChildMode(false);
+  else html = renderParentDashboard();
   if (AppState.showUnlockModal) html += renderUnlockModal();
   if (AppState.showDeleteAccountModal) html += renderDeleteAccountModal();
   root.innerHTML = html;
   hydrateMediaEls();
-  hydrateHiddenUnlockSpot();
   document.body.style.background = AppState.settings.bgColor;
 }
 
@@ -242,26 +443,6 @@ function hydrateMediaEls() {
     const url = await idbGetObjectUrl(id);
     if (url) el.src = url;
   });
-}
-
-function hydrateHiddenUnlockSpot() {
-  const spot = document.getElementById("hiddenUnlockSpot");
-  if (!spot) return;
-  let timer = null;
-  const start = () => {
-    timer = setTimeout(() => {
-      AppState.showUnlockModal = true;
-      AppState.unlockPinBuffer = "";
-      render();
-    }, 1400);
-  };
-  const cancel = () => {
-    if (timer) clearTimeout(timer);
-  };
-  spot.addEventListener("pointerdown", start);
-  spot.addEventListener("pointerup", cancel);
-  spot.addEventListener("pointerleave", cancel);
-  spot.addEventListener("pointercancel", cancel);
 }
 
 /* =========================================================================
@@ -278,19 +459,45 @@ function esc(str) {
 }
 
 /* =========================================================================
-   ONBOARDING
+   ACCOUNT AUTH / CHILD PICKER / ONBOARDING
    ========================================================================= */
+function renderAuthScreen() {
+  const authMode = AppState.authMode || "login";
+  return `<div class="screen"><div class="modal-overlay"><div class="modal-card">
+    <h2>${authMode === "login" ? "Sign in" : "Create your parent account"}</h2>
+    ${authMode === "register" ? `<p style="color:#6b7280;font-size:14px;">My Voice and Safe Space is a personal, parent-managed communication tool. It does not replace professional advice or an individually assessed communication system, and it is not officially affiliated with PECS. Your account and each child's board/settings sync securely so you can sign in on other devices. Photos, videos and voice recordings always stay only on the device that captured them.</p>` : ""}
+    ${AppState.authError ? `<div class="banner">${esc(AppState.authError)}</div>` : ""}
+    <div class="field"><label for="auth-email">Email</label><input id="auth-email" type="email" autocomplete="username" value="${esc(AppState.authEmail || "")}" /></div>
+    <div class="field"><label for="auth-password">Password</label><input id="auth-password" type="password" autocomplete="${authMode === "login" ? "current-password" : "new-password"}" /></div>
+    ${AppState.authBusy
+      ? `<p>Please wait…</p>`
+      : `<button class="pill-btn" style="width:100%;" data-action="authSubmit">${authMode === "login" ? "Sign in" : "Create account"}</button>`}
+    <p style="text-align:center;margin-top:14px;">
+      ${authMode === "login"
+        ? `New here? <button type="button" class="link-btn" data-action="authSwitchMode" data-mode="register">Create an account</button>`
+        : `Already have an account? <button type="button" class="link-btn" data-action="authSwitchMode" data-mode="login">Sign in</button>`}
+    </p>
+  </div></div></div>`;
+}
+
+function renderChildPicker() {
+  return `<div class="screen"><div class="modal-overlay"><div class="modal-card">
+    <h2>Choose a child profile</h2>
+    <div class="item-list">
+      ${AppState.children.map((c) => `
+        <button class="item-card" data-action="pickerSelectChild" data-id="${c.id}" style="text-align:left;">
+          <strong>${esc(c.name)}</strong>
+        </button>`).join("")}
+    </div>
+    <button class="pill-btn secondary" style="margin-top:14px;width:100%;" data-action="pickerAddChild">➕ Add another child</button>
+    <button class="pill-btn secondary" style="margin-top:10px;width:100%;" data-action="signOut">Sign out</button>
+  </div></div></div>`;
+}
+
 function renderOnboarding() {
-  const step = AppState.onboardingStep || 1;
+  const step = AppState.onboardingStep || 2;
   let body = "";
-  if (step === 1) {
-    body = `
-      <h2>Welcome to My Voice and Safe Space</h2>
-      <p>This app is a personal, parent-managed communication and sensory-support space for your child.</p>
-      <p>It is an assistive communication and personal support tool. It does not replace professional advice or an individually assessed communication system, and it is not officially affiliated with PECS or any other proprietary system.</p>
-      <p>All photos, videos, recordings and communication content are stored only on this device unless you choose to export a backup file yourself.</p>
-      <button class="pill-btn" data-action="onboardNext">Get started</button>`;
-  } else if (step === 2) {
+  if (step === 2) {
     body = `
       <h2>Tell us about your child</h2>
       <div class="field">
@@ -350,7 +557,7 @@ function renderChildMode(embeddedUnused) {
   } else {
     inner = renderChildHome();
   }
-  const spot = `<button id="hiddenUnlockSpot" class="hidden-unlock-spot" aria-label="Parent unlock" title=""></button>`;
+  const spot = `<button class="parent-access-btn" data-action="parentAccessTap" aria-label="Parent Access">🔒</button>`;
   return `<div class="screen" oncontextmenu="return false">${inner}${spot}</div>`;
 }
 
@@ -380,7 +587,7 @@ function homeButtonHtml() {
 function renderChildPhotosGrid() {
   const cats = AppState.photoCategories;
   const filter = AppState.childPhotoCategory;
-  const items = AppState.media.filter((m) => !m.hidden && (filter === "all" || m.categoryId === filter));
+  const items = AppState.media.filter((m) => m.childId === AppState.activeChildId && !m.hidden && (filter === "all" || m.categoryId === filter));
   return `
     <div class="topbar">
       ${homeButtonHtml()}
@@ -407,7 +614,7 @@ function renderChildPhotosGrid() {
 
 function currentPhotoList() {
   const filter = AppState.childPhotoCategory;
-  return AppState.media.filter((m) => !m.hidden && (filter === "all" || m.categoryId === filter));
+  return AppState.media.filter((m) => m.childId === AppState.activeChildId && !m.hidden && (filter === "all" || m.categoryId === filter));
 }
 
 function renderChildPhotoViewer() {
@@ -531,15 +738,30 @@ function renderWordVideoOverlay() {
    UNLOCK / DELETE MODALS
    ========================================================================= */
 function renderUnlockModal() {
+  const tab = AppState.unlockAuthTab || "pin";
   const buf = AppState.unlockPinBuffer || "";
+  const hasBiometric = !!AppState.security.webauthnCredentialId;
   return `
     <div class="modal-overlay">
       <div class="modal-card" style="text-align:center;">
-        <h2>Parent Unlock</h2>
-        <p>Enter the PIN to leave Child Mode.</p>
+        <h2>Parent Access</h2>
+        <p>Verify to leave Child Mode.</p>
         ${AppState.unlockError ? `<div class="banner">${esc(AppState.unlockError)}</div>` : ""}
-        <div class="pin-dots">${[0,1,2,3].map(i => `<div class="pin-dot ${i < buf.length ? "filled" : ""}"></div>`).join("")}</div>
-        ${renderPinPad("unlockPinDigit", "unlockPinBackspace")}
+        <div class="row" style="justify-content:center;margin-bottom:14px;">
+          <button class="small-btn ${tab === "pin" ? "active" : ""}" data-action="setUnlockTab" data-tab="pin">PIN</button>
+          <button class="small-btn ${tab === "password" ? "active" : ""}" data-action="setUnlockTab" data-tab="password">Password</button>
+          ${hasBiometric ? `<button class="small-btn ${tab === "biometric" ? "active" : ""}" data-action="setUnlockTab" data-tab="biometric">Face/Touch ID</button>` : ""}
+        </div>
+        ${tab === "pin" ? `
+          <div class="pin-dots">${[0,1,2,3].map(i => `<div class="pin-dot ${i < buf.length ? "filled" : ""}"></div>`).join("")}</div>
+          ${renderPinPad("unlockPinDigit", "unlockPinBackspace")}
+        ` : ""}
+        ${tab === "password" ? `
+          <div class="field" style="text-align:left;"><label>Account email</label><input id="unlock-email" type="email" value="${esc(AppState.account.email || "")}" readonly /></div>
+          <div class="field" style="text-align:left;"><label>Password</label><input id="unlock-password" type="password" autocomplete="current-password" /></div>
+          <button class="pill-btn" style="width:100%;" data-action="unlockWithPassword">Unlock</button>
+        ` : ""}
+        ${tab === "biometric" ? `<button class="pill-btn" style="width:100%;" data-action="unlockWithBiometric">👆 Verify with Face/Touch ID</button>` : ""}
         <button class="pill-btn secondary" style="margin-top:16px;" data-action="closeUnlockModal">Cancel</button>
       </div>
     </div>`;
@@ -630,18 +852,30 @@ function renderTabProfile() {
       </div>
     </div>
     <div class="card">
-      <h2 style="font-size:18px;margin-top:0;">Approved Devices</h2>
-      <p style="color:#6b7280;font-size:14px;">This app stores content locally on each device. There is currently no cloud sync between devices — each device keeps its own private copy.</p>
+      <h2 style="font-size:18px;margin-top:0;">Account</h2>
+      <p style="color:#6b7280;font-size:14px;">Signed in as <strong>${esc(AppState.account.email || "")}</strong>. Your account and each child's board/settings sync across devices when you sign in. Photos, videos and voice recordings always stay only on the device that captured them.</p>
+      <button class="pill-btn secondary" data-action="signOut">Sign out</button>
+    </div>
+    <div class="card">
+      <h2 style="font-size:18px;margin-top:0;">Child profiles on this account</h2>
       <div class="item-list">
-        ${AppState.approvedDevices.map(d => `<div class="item-card"><strong>${esc(d.name)}</strong><span class="tag">Added ${new Date(d.addedAt).toLocaleDateString()}</span></div>`).join("")}
+        ${AppState.children.map(c => `
+          <div class="item-card">
+            <strong>${esc(c.name)}${c.id === AppState.activeChildId ? " (current)" : ""}</strong>
+            <div class="row">
+              ${c.id !== AppState.activeChildId ? `<button class="small-btn" data-action="switchChild" data-id="${c.id}">Switch to this child</button>` : ""}
+              ${AppState.children.length > 1 ? `<button class="small-btn danger" data-action="deleteChildProfile" data-id="${c.id}">Delete</button>` : ""}
+            </div>
+          </div>`).join("")}
       </div>
+      <button class="pill-btn secondary" style="margin-top:12px;" data-action="pickerAddChild">➕ Add another child</button>
     </div>`;
 }
 
 /* ---- Media library ---- */
 function renderTabMedia() {
   const filter = AppState.mediaFilterCat || "all";
-  const items = AppState.media.filter((m) => filter === "all" || m.categoryId === filter);
+  const items = AppState.media.filter((m) => m.childId === AppState.activeChildId && (filter === "all" || m.categoryId === filter));
   return `
     <h2>Photo & Video Library</h2>
     <div class="card">
@@ -843,6 +1077,13 @@ function renderTabChildMode() {
       <div class="toggle-row"><span>Show a Home button while viewing photos/videos</span><label class="switch"><input type="checkbox" ${cfg.showHomeButtonInPhotos?"checked":""} data-action-change="toggleShowHomeInPhotos" /><span class="slider"></span></label></div>
     </div>
     <div class="card">
+      <h2 style="font-size:16px;margin-top:0;">Face/Touch ID unlock</h2>
+      <p style="color:#6b7280;font-size:14px;">Optional. Uses this device's built-in Face ID, Touch ID or fingerprint sensor as a fast way to leave Child Mode, alongside your PIN and account password.</p>
+      ${AppState.security.webauthnCredentialId
+        ? `<button class="small-btn danger" data-action="disableBiometric">Turn off Face/Touch ID unlock</button>`
+        : `<button class="pill-btn secondary" data-action="enableBiometric">Set up Face/Touch ID unlock</button>`}
+    </div>
+    <div class="card">
       <h2 style="font-size:16px;margin-top:0;">Device Locking Guidance</h2>
       <div class="info-banner">A website cannot fully take over a device the way a native app can. For the strongest protection, combine Child Mode below with your device's own lock feature.</div>
       <p><strong>iPad / iPhone (Guided Access):</strong> Settings → Accessibility → Guided Access → turn on. Then triple-click the side/home button while the app is open to start it, and set a Guided Access passcode.</p>
@@ -917,7 +1158,7 @@ function renderTabBackup() {
 function renderTabPrivacy() {
   return `
     <h2>Data & Privacy</h2>
-    <div class="info-banner">All photos, videos, recordings and communication content are stored only in this browser on this device (using local storage and IndexedDB). Nothing is sent to a server, shown publicly, or used for advertising.</div>
+    <div class="info-banner">Photos, videos and voice recordings are stored only in this browser on this device (local storage and IndexedDB) and are never uploaded. Your account email (password stored as a salted hash, never in plain text) and each child's board/settings/wording sync to a private database so you can sign in on other devices. Nothing is shown publicly, sold, or used for advertising.</div>
     <div class="card">
       <div class="toggle-row"><span>Keep a private history of selections made in Child Mode</span><label class="switch"><input type="checkbox" ${AppState.usageHistoryEnabled?"checked":""} data-action-change="toggleSetting" data-key="usageHistoryEnabled" /><span class="slider"></span></label></div>
       ${AppState.usageHistoryEnabled ? `
@@ -952,11 +1193,11 @@ function renderTabHelp() {
       <p>2. Personalise buttons in <strong>My Voice Editor</strong> and <strong>Words & Actions Editor</strong> — add real photos, record your own voice, and edit the wording.</p>
       <p>3. Check <strong>Layout & Accessibility</strong> and <strong>Child Mode Settings</strong> to match your child's needs.</p>
       <p>4. Use <strong>Live Preview</strong> to see exactly what your child will experience.</p>
-      <p>5. Tap <strong>Lock into Child Mode</strong> to hand the device to your child. To get back, hold the small circle in the bottom-right corner for a couple of seconds and enter your PIN.</p>
+      <p>5. Tap <strong>Lock into Child Mode</strong> to hand the device to your child. To get back, tap the small lock icon in the bottom-right corner <strong>five times in a row</strong>, then verify with your PIN, your account password, or Face/Touch ID.</p>
     </div>
     <div class="card">
       <h2 style="font-size:16px;">Forgotten PIN?</h2>
-      <p>There is no remote PIN recovery, because nothing about this app is stored on a server. If the PIN is lost, you will need to use "Delete entire account & all data" from a device that is already unlocked, or clear this site's browser data, and start again.</p>
+      <p>Use the "Password" tab on the Parent Access screen to unlock with your account email and password instead. You can then set a new PIN from Child Mode Settings.</p>
     </div>`;
 }
 
@@ -975,8 +1216,96 @@ function renderTabAbout() {
    ACTIONS
    ========================================================================= */
 const Actions = {
-  /* Onboarding */
-  onboardNext() { AppState.onboardingStep = 2; render(); },
+  /* Account auth */
+  authSwitchMode(el) {
+    AppState.authMode = el.dataset.mode;
+    AppState.authError = "";
+    render();
+  },
+  async authSubmit() {
+    const email = document.getElementById("auth-email").value.trim();
+    const password = document.getElementById("auth-password").value;
+    AppState.authEmail = email;
+    if (!email || !password) {
+      AppState.authError = "Please fill in both fields.";
+      render();
+      return;
+    }
+    AppState.authBusy = true;
+    AppState.authError = "";
+    render();
+    try {
+      const fn = (AppState.authMode || "login") === "login" ? apiLogin : apiRegister;
+      const result = await fn(email, password);
+      AppState.account = { token: result.token, email: result.parent.email };
+      AppState.authBusy = false;
+      await bootAfterAuth();
+    } catch (e) {
+      AppState.authBusy = false;
+      AppState.authError = e.offline ? "You appear to be offline. Please connect to the internet to sign in." : e.message;
+      render();
+    }
+  },
+
+  /* Child picker */
+  pickerSelectChild(el) {
+    const child = AppState.children.find((c) => c.id === el.dataset.id);
+    if (!child) return;
+    loadChildIntoProfile(child);
+    AppState.mode = "child";
+    AppState.childView = AppState.childModeConfig.lockToSingleSection || "home";
+    saveState();
+    render();
+  },
+  pickerAddChild() {
+    resetProfileFieldsForNewChild();
+    AppState.activeChildId = null;
+    AppState.mode = "onboard-child";
+    AppState.onboardingStep = 2;
+    render();
+  },
+  async signOut() {
+    if (!confirm("Sign out of this account on this device? Locally added photos/videos stay on this device, but you'll need to sign in again to reach any child's board.")) return;
+    await flushProfilePush();
+    AppState.account = { token: null, email: null };
+    AppState.children = [];
+    AppState.activeChildId = null;
+    resetProfileFieldsForNewChild();
+    AppState.mode = "auth";
+    saveState();
+    render();
+  },
+  async switchChild(el) {
+    await flushProfilePush();
+    const child = AppState.children.find((c) => c.id === el.dataset.id);
+    if (!child) return;
+    loadChildIntoProfile(child);
+    AppState.dashTab = "profile";
+    persistAndRender();
+  },
+  async deleteChildProfile(el) {
+    if (!confirm("Delete this child's profile and board? This cannot be undone. Photos/videos already on this device are not automatically deleted.")) return;
+    try {
+      await apiDeleteChild(el.dataset.id);
+      AppState.media = AppState.media.filter((m) => m.childId !== el.dataset.id);
+      AppState.children = AppState.children.filter((c) => c.id !== el.dataset.id);
+      if (AppState.activeChildId === el.dataset.id) {
+        AppState.activeChildId = null;
+        if (AppState.children.length) {
+          loadChildIntoProfile(AppState.children[0]);
+        } else {
+          resetProfileFieldsForNewChild();
+          AppState.mode = "onboard-child";
+          AppState.onboardingStep = 2;
+        }
+      }
+      persistAndRender();
+    } catch (e) {
+      alert(e.message || "Could not delete this child profile.");
+    }
+  },
+
+  /* Onboarding (create a child profile) */
   onboardEmoji(el) { AppState.child.emoji = el.dataset.val; render(); },
   onboardSaveName() {
     const val = document.getElementById("ob-name").value.trim();
@@ -999,9 +1328,22 @@ const Actions = {
       } else {
         if (buf === AppState.onboardingPinFirst) {
           await setPin(buf);
-          AppState.onboarded = true;
-          AppState.mode = "parent";
-          saveState();
+          try {
+            const child = await apiCreateChild(AppState.child.name || "My child", buildProfileSnapshot());
+            AppState.children.push(child);
+            AppState.activeChildId = child.id;
+            AppState.mode = "child";
+            AppState.childView = AppState.childModeConfig.lockToSingleSection || "home";
+            saveState();
+          } catch (e) {
+            AppState.onboardingPinError = e.offline
+              ? "You appear to be offline — connect to the internet to finish setup."
+              : e.message || "Could not save the child profile. Please try again.";
+            AppState.onboardingPinStage = "enter";
+            AppState.onboardingPinBuffer = "";
+            render();
+            return;
+          }
         } else {
           AppState.onboardingPinError = "PINs did not match. Please try again.";
           AppState.onboardingPinStage = "enter";
@@ -1028,7 +1370,58 @@ const Actions = {
       if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
     } catch (e) {}
   },
+  parentAccessTap() {
+    const now = Date.now();
+    parentAccessTapTimes = parentAccessTapTimes.filter((t) => now - t < 2000);
+    parentAccessTapTimes.push(now);
+    if (parentAccessTapTimes.length >= 5) {
+      parentAccessTapTimes = [];
+      AppState.showUnlockModal = true;
+      AppState.unlockAuthTab = "pin";
+      AppState.unlockPinBuffer = "";
+      AppState.unlockError = "";
+      render();
+    }
+  },
   closeUnlockModal() { AppState.showUnlockModal = false; render(); },
+  setUnlockTab(el) { AppState.unlockAuthTab = el.dataset.tab; AppState.unlockError = ""; render(); },
+  async unlockWithPassword() {
+    const password = document.getElementById("unlock-password").value;
+    if (!password) return;
+    try {
+      const result = await apiLogin(AppState.account.email, password);
+      AppState.account.token = result.token;
+      AppState.mode = "parent";
+      AppState.showUnlockModal = false;
+      if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      persistAndRender();
+    } catch (e) {
+      AppState.unlockError = e.offline ? "You appear to be offline." : e.message || "Incorrect password.";
+      render();
+    }
+  },
+  async unlockWithBiometric() {
+    try {
+      await verifyBiometricCredential(AppState.security.webauthnCredentialId);
+      AppState.mode = "parent";
+      AppState.showUnlockModal = false;
+      if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      persistAndRender();
+    } catch (e) {
+      AppState.unlockError = "Could not verify with Face/Touch ID.";
+      render();
+    }
+  },
+  async enableBiometric() {
+    try {
+      const credId = await enrollBiometricCredential();
+      AppState.security.webauthnCredentialId = credId;
+      persistAndRender();
+    } catch (e) {
+      alert(e.message || "Could not set up Face/Touch ID unlock.");
+    }
+  },
+  disableBiometric() { AppState.security.webauthnCredentialId = null; persistAndRender(); },
   async unlockPinDigit(el) {
     const buf = (AppState.unlockPinBuffer || "") + el.dataset.val;
     AppState.unlockPinBuffer = buf;
@@ -1295,6 +1688,11 @@ const Actions = {
       alert('Please type DELETE exactly to confirm.');
       return;
     }
+    try {
+      if (AppState.account.token) await apiDeleteAccount();
+    } catch (e) {
+      console.error("Server-side account deletion failed", e);
+    }
     await idbClearAll();
     localStorage.removeItem(MVSS_STATE_KEY);
     location.reload();
@@ -1433,7 +1831,7 @@ const FileActions = {
   async importBackup(el) {
     const file = el.files[0];
     if (!file) return;
-    if (!confirm("Importing will replace all current content on this device. Continue?")) return;
+    if (!confirm("Importing will replace this child's board, settings and local photos/videos on this device. Continue?")) return;
     try {
       const text = await file.text();
       const data = JSON.parse(text);
@@ -1442,8 +1840,10 @@ const FileActions = {
         const blob = base64ToBlob(base64);
         await idbPut(id, blob);
       }
-      AppState = Object.assign(defaultState(), data.state);
-      AppState.mode = "parent";
+      const fresh = defaultState();
+      const importedState = data.state || {};
+      PROFILE_KEYS.forEach((k) => { AppState[k] = importedState[k] !== undefined ? importedState[k] : fresh[k]; });
+      AppState.media = (Array.isArray(importedState.media) ? importedState.media : []).map((m) => Object.assign({}, m, { childId: AppState.activeChildId }));
       AppState.dashTab = "profile";
       persistAndRender();
       alert("Backup restored.");
@@ -1464,6 +1864,7 @@ async function addMediaFiles(type, fileList) {
       type,
       name: file.name.replace(/\.[^.]+$/, "") || (type === "photo" ? "New Photo" : "New Video"),
       categoryId: filterCat,
+      childId: AppState.activeChildId,
       fileId,
       favorite: false,
       hidden: false,
@@ -1508,7 +1909,10 @@ async function exportBackupFile() {
     const blob = await idbGet(id);
     if (blob) files[id] = await blobToBase64(blob);
   }
-  const payload = { exportedAt: new Date().toISOString(), state: AppState, files };
+  const exportState = {};
+  PROFILE_KEYS.forEach((k) => (exportState[k] = AppState[k]));
+  exportState.media = AppState.media.filter((m) => m.childId === AppState.activeChildId);
+  const payload = { exportedAt: new Date().toISOString(), state: exportState, files };
   const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -1588,4 +1992,4 @@ if ("serviceWorker" in navigator) {
 /* =========================================================================
    INIT
    ========================================================================= */
-render();
+boot();

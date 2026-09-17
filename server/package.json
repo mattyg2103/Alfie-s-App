@@ -1,0 +1,16 @@
+{
+  "name": "my-voice-safe-space-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Account, child-profile and settings sync API for My Voice and Safe Space. Never stores photos, videos or audio recordings — those stay local to each device.",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.12.0"
+  }
+}
