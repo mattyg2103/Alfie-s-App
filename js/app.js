@@ -485,7 +485,7 @@ function renderChildPicker() {
     <h2>Choose a child profile</h2>
     <div class="item-list">
       ${AppState.children.map((c) => `
-        <button class="item-card" data-action="pickerSelectChild" data-id="${c.id}" style="text-align:left;">
+        <button class="item-card" data-action="pickerSelectChild" data-id="${c.id}" style="text-align:left;background:var(--btn);font:inherit;width:100%;cursor:pointer;">
           <strong>${esc(c.name)}</strong>
         </button>`).join("")}
     </div>

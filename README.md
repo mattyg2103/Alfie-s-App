@@ -14,12 +14,33 @@ App Store / Play Store app. That means:
 - It can be opened immediately on any phone, tablet or computer with a
   modern browser — no app review, no install required (though it *can*
   be "Added to Home Screen" to launch like a normal app).
-- Once loaded once, it keeps working with no internet connection.
-- All photos, videos, voice recordings and communication boards are stored
-  **only on the device itself** (in the browser's local storage and
-  IndexedDB) — nothing is uploaded to a server, because there is no server.
-  This satisfies the "local-only by default" and "no cloud backup without
-  consent" requirements simply by not having a backend at all.
+- Once loaded once, the core communication and photo/video experience keeps
+  working with no internet connection.
+- Photos, videos and voice recordings are stored **only on the device
+  itself** (browser local storage and IndexedDB) and are never uploaded,
+  full stop. A parent account and each child's board/settings *do* sync
+  through a small backend so a parent can sign in on more than one device
+  — see **Accounts & syncing** below for exactly what that does and doesn't
+  include.
+
+## Accounts & syncing
+
+- `server/` is a small Express API (deployed separately on Render) backed
+  by a Postgres database (Neon). It has exactly two tables: `parents`
+  (email + salted/hashed password — never plaintext) and `children` (a
+  JSON blob of board/settings per child).
+- What syncs: the parent account, and each child's name, communication
+  board (categories, buttons, wording, emoji, colours), Words & Actions
+  board, layout/accessibility settings, Child Mode configuration, and PIN
+  hash.
+- What never syncs, by design: photos, videos, and voice recordings. Those
+  stay in IndexedDB on whichever device captured them. A second device
+  signed into the same account sees the same board and settings, but needs
+  its own photos/recordings added.
+- If you'd rather run with no backend at all (pure local-only, like the
+  original MVP), that's a valid choice — see `js/app.js`'s `API_BASE` and
+  the `boot()`/`Actions.authSubmit` flow, which would need to be swapped
+  back to a local-only onboarding flow.
 
 ## Running it
 
@@ -73,9 +94,41 @@ about a minute either way.
   microphone voice recording, and offline mode (service worker) all work
   fully — unlike the sandboxed artifact demo shared earlier in this chat.
 
+### Deploying the backend API
+
+`server/` is a separate Render **Web Service** (Node), not part of the
+static site above:
+
+1. **New +** → **Web Service**, connect this repo, same branch.
+2. **Build Command**: `cd server && npm install`
+3. **Start Command**: `cd server && npm start`
+4. Environment variables:
+   - `DATABASE_URL` — a Neon Postgres connection string (Neon dashboard →
+     your project → Connection Details). The schema (`parents`, `children`
+     tables) needs to exist first — see `server/index.js` for the two
+     `CREATE TABLE` statements if you're setting up a fresh database.
+   - `JWT_SECRET` — any long random string (e.g. `openssl rand -hex 32`).
+   - `CORS_ORIGIN` — the static site's URL, e.g.
+     `https://my-voice-safe-space.onrender.com`.
+5. Update `API_BASE` at the top of `js/app.js` to match this service's
+   Render URL if you name it something other than
+   `my-voice-safe-space-api`.
+
+The API has no other secrets or third-party dependencies — just Express,
+`pg`, `jsonwebtoken` and `cors`.
+
 ## What's implemented (MVP)
 
-- Onboarding: child's name/icon, and a 4-digit parent PIN.
+- Parent account registration/sign-in (email + password), syncing across
+  devices. Support for multiple child profiles per account, with a
+  switcher in Parent Mode and a picker screen when signing in fresh.
+- The app boots straight into the last-selected child's locked Child Mode
+  on launch — not the dashboard — so a reload never exposes parent
+  controls by accident.
+- **Parent Access**: a discreet, always-visible button in the corner of
+  Child Mode. Five consecutive taps (not a long-press) opens an
+  authentication screen offering PIN, account password, or optional
+  WebAuthn Face/Touch ID.
 - **Parent Mode** dashboard: child profile, photo & video library, a full
   communication-board editor ("My Voice"), a "Words and Actions" editor,
   voice/audio settings, Child Mode settings, layout & accessibility
@@ -96,13 +149,15 @@ about a minute either way.
 - Accessibility: adjustable button/text size, colours, optional
   confirm-before-speak, a configurable delay between selections, optional
   vibration, and reduced-motion support.
-- A hidden, press-and-hold PIN unlock in the corner of Child Mode, plus a
-  Fullscreen request and a best-effort back-button trap.
-- Full local backup export/import (single JSON file, including all media,
-  base64-encoded) and a printable paper version of the communication board.
-- "Delete everything" (typed confirmation) wipes local storage and
-  IndexedDB entirely.
-- Works fully offline after first load, via a service worker.
+- Fullscreen request and a best-effort back-button trap while in Child Mode.
+- Full local backup export/import (single JSON file, including this
+  child's media, base64-encoded) and a printable paper version of the
+  communication board.
+- "Delete everything" (typed confirmation) deletes the account and all
+  child profiles from the server, then wipes local storage and IndexedDB
+  on this device.
+- Works fully offline after first load for anyone already signed in with
+  an active child selected — sign-in itself needs connectivity.
 
 ## Honest limitations
 
@@ -120,23 +175,34 @@ native app can. This app is upfront about that rather than overclaiming:
   for this — it is only possible in native apps.
 - **Camera/video capture** uses the device's normal native camera UI (via
   a file input with `capture`), not a custom in-app camera preview.
-- **No multi-device cloud sync.** Each device keeps its own private copy.
-  Use Backup & Restore to manually move content between devices.
+- **Media never syncs.** Photos, videos and recordings stay per-device.
+  Use Backup & Restore to manually move a child's media between devices.
+- **Biometric unlock is a device-local gate, not a server login.** It uses
+  WebAuthn's platform authenticator (Face ID/Touch ID/fingerprint) purely
+  to withhold a locally-stored credential until the OS verifies you — it
+  doesn't call the server, so it's a convenience layer on top of the PIN
+  and password, not a replacement for them.
 - **Speech quality** depends entirely on the voices your browser/OS
   provides via the Web Speech API.
 
 ## File layout
 
 ```
-index.html        Entry point
-css/style.css      All styling (large touch targets, adjustable theme)
-js/db.js           IndexedDB helper for photo/video/audio blobs
-js/data.js         Default starter categories & buttons (fully editable)
-js/app.js          Application state, rendering and all interaction logic
-sw.js              Service worker for offline caching
-manifest.json      PWA manifest (installable, home-screen icon)
-icons/icon.svg     App icon
+index.html          Entry point
+css/style.css        All styling (large touch targets, adjustable theme)
+js/db.js             IndexedDB helper for photo/video/audio blobs
+js/data.js           Default starter categories & buttons (fully editable)
+js/app.js            App state, rendering, interaction logic, and the API client
+sw.js                Service worker for offline caching
+manifest.json        PWA manifest (installable, home-screen icon)
+icons/icon.svg       App icon
+server/index.js      Express API: auth + child profile sync routes
+server/auth.js        Password hashing (scrypt), JWT issuing/verification
+server/db.js           Postgres connection pool
+server/package.json    Backend dependencies (express, pg, jsonwebtoken, cors)
+render.yaml           Blueprint for the static site (frontend only)
 ```
 
-No build step, no external dependencies, no analytics or third-party
-scripts — everything runs from these files alone.
+The frontend has no build step and no third-party analytics. The backend
+is a minimal Express API with four dependencies, no ORM, no framework
+magic — two tables, five routes.
