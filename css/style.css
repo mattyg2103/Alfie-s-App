@@ -17,19 +17,25 @@ html, body {
   background: var(--bg);
   color: var(--text);
   overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
 }
 
-#app { min-height: 100vh; display: flex; flex-direction: column; }
+#app { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
 
-button { font-family: inherit; cursor: pointer; }
+button { font-family: inherit; cursor: pointer; touch-action: manipulation; }
+
+/* Prevents iOS Safari from auto-zooming the page when a form field is
+   focused (it does this for any control under 16px). */
+input, select, textarea { font-size: 16px; }
 
 img, video { -webkit-user-drag: none; user-select: none; }
 
 /* ---------- Layout helpers ---------- */
-.screen { flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+.screen { flex: 1; display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 20px; gap: 12px; flex-wrap: wrap;
+  padding-top: calc(14px + env(safe-area-inset-top, 0px));
 }
 .topbar h1, .topbar h2 { margin: 0; font-size: 22px; }
 .spacer { flex: 1; }
@@ -52,19 +58,26 @@ img, video { -webkit-user-drag: none; user-select: none; }
 .pill-btn:disabled { opacity: 0.5; }
 
 /* ---------- Child home ---------- */
-.child-home { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; padding: 24px; }
+.child-home {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; padding: 24px;
+  padding-top: calc(24px + env(safe-area-inset-top, 0px));
+}
 .child-home-tiles { display: flex; flex-wrap: wrap; justify-content: center; gap: 28px; }
 .home-tile {
-  width: 240px; height: 240px; border-radius: 28px; border: none;
+  width: 240px; height: 240px; max-width: 100%; border-radius: 28px; border: none;
   background: var(--btn); display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 14px; box-shadow: 0 4px 14px rgba(0,0,0,0.1); font-size: 20px; font-weight: 700; color: var(--text);
+  touch-action: manipulation;
 }
 .home-tile .emoji { font-size: 72px; }
 .home-tile:active { transform: scale(0.97); }
 .greeting { font-size: 28px; font-weight: 700; text-align: center; }
 
 .parent-access-btn {
-  position: fixed; bottom: 14px; right: 14px; width: 48px; height: 48px;
+  position: fixed;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  right: calc(14px + env(safe-area-inset-right, 0px));
+  width: 48px; height: 48px;
   border-radius: 50%; background: rgba(15,23,42,0.55); color: white; border: none;
   opacity: 0.45; font-size: 18px; display: flex; align-items: center; justify-content: center;
   z-index: 50; transition: opacity 0.15s, transform 0.15s;
@@ -87,6 +100,7 @@ img, video { -webkit-user-drag: none; user-select: none; }
   background: var(--btn); border: 3px solid transparent; border-radius: var(--radius);
   min-height: var(--btn-size); display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 8px; padding: 12px; box-shadow: 0 3px 8px rgba(0,0,0,0.08); position: relative;
+  touch-action: manipulation;
 }
 .tile-btn:active, .tile-btn.pressed { transform: scale(0.95); }
 .tile-btn .emoji, .tile-btn img.tile-img { font-size: 56px; }
@@ -116,7 +130,10 @@ img, video { -webkit-user-drag: none; user-select: none; }
 .viewer { flex: 1; display: flex; flex-direction: column; background: #000; color: white; }
 .viewer-media { flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .viewer-media img, .viewer-media video { max-width: 100%; max-height: 100%; object-fit: contain; }
-.viewer-controls { display: flex; align-items: center; justify-content: center; gap: 24px; padding: 18px; background: rgba(0,0,0,0.5); }
+.viewer-controls {
+  display: flex; align-items: center; justify-content: center; gap: 24px; padding: 18px; background: rgba(0,0,0,0.5);
+  padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+}
 .viewer-nav-btn { width: 76px; height: 76px; border-radius: 50%; border: none; background: rgba(255,255,255,0.15); color: white; font-size: 30px; }
 .viewer-caption { text-align: center; padding: 8px; font-size: 18px; }
 
@@ -132,6 +149,18 @@ img, video { -webkit-user-drag: none; user-select: none; }
 @keyframes shakeA { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-10px)} 75%{transform:translateX(10px)} }
 @keyframes spinA { from{transform:rotate(0)} to{transform:rotate(360deg)} }
 
+/* ---------- Loading ---------- */
+.loading-screen { align-items: center; justify-content: center; }
+.loading-spinner {
+  width: 48px; height: 48px; border-radius: 50%;
+  border: 5px solid #dbeafe; border-top-color: var(--accent);
+  animation: spinLoader 0.8s linear infinite;
+}
+@keyframes spinLoader { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner { animation: none; border-top-color: #dbeafe; }
+}
+
 /* ---------- Onboarding / modals ---------- */
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(15,23,42,0.55); display: flex; align-items: center; justify-content: center;
@@ -139,7 +168,7 @@ img, video { -webkit-user-drag: none; user-select: none; }
 }
 .modal-card {
   background: white; border-radius: 22px; padding: 28px; max-width: 480px; width: 100%;
-  max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+  max-height: 90vh; max-height: 90dvh; overflow-y: auto; box-shadow: 0 10px 40px rgba(0,0,0,0.3);
 }
 .modal-card h2 { margin-top: 0; }
 .field { margin-bottom: 16px; }
@@ -155,14 +184,22 @@ img, video { -webkit-user-drag: none; user-select: none; }
 .pin-pad button { min-height: 60px; font-size: 22px; border-radius: 14px; border: none; background: #f1f5f9; }
 
 /* ---------- Parent dashboard ---------- */
-.dash { display: flex; min-height: 100vh; }
-.dash-nav { width: 230px; background: #0f172a; color: white; padding: 18px 10px; display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+.dash { display: flex; min-height: 100vh; min-height: 100dvh; }
+.dash-nav {
+  width: 230px; background: #0f172a; color: white; padding: 18px 10px; display: flex; flex-direction: column; gap: 4px; flex-shrink: 0;
+  padding-top: calc(18px + env(safe-area-inset-top, 0px));
+}
 .dash-nav h1 { font-size: 16px; padding: 0 10px 14px; }
 .dash-nav button {
   background: transparent; border: none; color: #cbd5e1; text-align: left; padding: 12px 12px; border-radius: 10px; font-size: 15px;
+  touch-action: manipulation;
 }
 .dash-nav button.active { background: var(--accent); color: white; }
-.dash-content { flex: 1; padding: 24px 30px; overflow-y: auto; max-height: 100vh; }
+.dash-nav-spacer { flex: 1; }
+.dash-content {
+  flex: 1; padding: 24px 30px; overflow-y: auto; max-height: 100vh; max-height: 100dvh;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+}
 .dash-content h2 { margin-top: 0; }
 .card { background: white; border-radius: 16px; padding: 20px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
 .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
@@ -190,8 +227,23 @@ img, video { -webkit-user-drag: none; user-select: none; }
 
 @media (max-width: 760px) {
   .dash { flex-direction: column; }
-  .dash-nav { width: 100%; flex-direction: row; overflow-x: auto; }
-  .dash-content { max-height: none; }
+  .dash-nav {
+    width: 100%; flex-direction: row; flex-wrap: wrap; overflow-x: visible;
+    padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  }
+  .dash-nav h1 { flex-basis: 100%; padding: 0 4px 8px; }
+  .dash-nav h1 small { display: none; }
+  .dash-nav button { font-size: 13px; padding: 10px 10px; white-space: nowrap; }
+  .dash-nav-spacer { display: none; }
+  .dash-nav .pill-btn { flex-basis: 100%; margin-top: 10px !important; }
+  .dash-content { max-height: none; padding: 18px 16px; }
+  .home-tile { width: 100%; max-width: 300px; }
+  .modal-card { padding: 20px; }
+  .preview-frame { border-width: 6px; }
+}
+
+@media (max-width: 480px) {
+  .grid { grid-template-columns: repeat(auto-fill, minmax(calc(var(--btn-size) * 0.72), 1fr)); }
 }
 
 @media (prefers-reduced-motion: reduce) {

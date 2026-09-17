@@ -69,6 +69,7 @@ let ActiveRecording = null;
 let pinFailCount = 0;
 let lastSelectionTs = 0;
 let parentAccessTapTimes = [];
+let booting = false;
 let profilePushTimer = null;
 
 function loadState() {
@@ -219,6 +220,11 @@ async function boot() {
     render();
     return;
   }
+  // Don't render whatever mode happened to be saved last time (it could be
+  // stale — e.g. "child" from a previous session) until bootAfterAuth has
+  // actually verified it against the server. Show a neutral loading screen
+  // instead, especially important on slower mobile connections.
+  booting = true;
   render();
   await bootAfterAuth();
 }
@@ -246,6 +252,7 @@ async function bootAfterAuth() {
     } else {
       AppState.mode = "picker";
     }
+    booting = false;
     saveState();
     render();
   } catch (e) {
@@ -263,6 +270,7 @@ async function bootAfterAuth() {
       AppState.mode = "auth";
       AppState.authError = "Could not reach the server. Please check your connection and try again.";
     }
+    booting = false;
     saveState();
     render();
   }
@@ -425,16 +433,21 @@ function render() {
   applyTheme();
   const root = document.getElementById("app");
   let html;
-  if (AppState.mode === "auth") html = renderAuthScreen();
+  if (booting) html = renderLoading();
+  else if (AppState.mode === "auth") html = renderAuthScreen();
   else if (AppState.mode === "onboard-child") html = renderOnboarding();
   else if (AppState.mode === "picker") html = renderChildPicker();
   else if (AppState.mode === "child") html = renderChildMode(false);
   else html = renderParentDashboard();
-  if (AppState.showUnlockModal) html += renderUnlockModal();
-  if (AppState.showDeleteAccountModal) html += renderDeleteAccountModal();
+  if (!booting && AppState.showUnlockModal) html += renderUnlockModal();
+  if (!booting && AppState.showDeleteAccountModal) html += renderDeleteAccountModal();
   root.innerHTML = html;
   hydrateMediaEls();
   document.body.style.background = AppState.settings.bgColor;
+}
+
+function renderLoading() {
+  return `<div class="screen loading-screen"><div class="loading-spinner" aria-label="Loading"></div></div>`;
 }
 
 function hydrateMediaEls() {
@@ -810,7 +823,7 @@ function renderParentDashboard() {
       <nav class="dash-nav">
         <h1>My Voice and Safe Space<br/><small style="font-weight:400;opacity:.7;">Parent Mode</small></h1>
         ${DASH_TABS.map(([id, label]) => `<button class="${tab === id ? "active" : ""}" data-action="setDashTab" data-tab="${id}">${label}</button>`).join("")}
-        <div style="flex:1;"></div>
+        <div class="dash-nav-spacer"></div>
         <button class="pill-btn" style="margin-top:14px;" data-action="lockChildMode">🔒 Lock into Child Mode</button>
       </nav>
       <main class="dash-content">
