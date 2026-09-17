@@ -59,10 +59,11 @@ function defaultState() {
     wordsActions: mvssDefaultWordsActions(),
     usageHistoryEnabled: false,
     usageHistory: [],
+    hasLockedChildMode: false,
   };
 }
 
-const PROFILE_KEYS = ["child", "security", "settings", "childModeConfig", "photoCategories", "voiceCategories", "wordsActions", "usageHistoryEnabled", "usageHistory"];
+const PROFILE_KEYS = ["child", "security", "settings", "childModeConfig", "photoCategories", "voiceCategories", "wordsActions", "usageHistoryEnabled", "usageHistory", "hasLockedChildMode"];
 
 const PROFILE_ICONS = ["🧒", "👦", "👧", "🧑", "😊", "🌟", "🚗", "⚽", "🎨", "🦖", "🐶", "🐱", "🦄", "🌈", "🚀", "🎵", "📚", "🧩", "⭐", "🎈"];
 
@@ -187,6 +188,7 @@ function loadChildIntoProfile(child) {
   AppState.wordsActions = data.wordsActions || fresh.wordsActions;
   AppState.usageHistoryEnabled = data.usageHistoryEnabled || false;
   AppState.usageHistory = data.usageHistory || [];
+  AppState.hasLockedChildMode = data.hasLockedChildMode || false;
   AppState.activeChildId = child.id;
 }
 
@@ -231,6 +233,20 @@ async function boot() {
   await bootAfterAuth();
 }
 
+function landOnChildOrParent() {
+  // Only auto-enter Child Mode once a parent has actually used "Lock into
+  // Child Mode" at least once for this child. Before that (a brand-new
+  // profile, or any reload in between), land in the Parent dashboard —
+  // there's setup a parent will want to do before handing the device over.
+  if (AppState.hasLockedChildMode) {
+    AppState.mode = "child";
+    AppState.childView = AppState.childModeConfig.lockToSingleSection || "home";
+  } else {
+    AppState.mode = "parent";
+    AppState.dashTab = "profile";
+  }
+}
+
 async function bootAfterAuth() {
   try {
     const children = await apiListChildren();
@@ -241,12 +257,10 @@ async function bootAfterAuth() {
       else AppState.activeChildId = null;
     }
     if (AppState.activeChildId) {
-      AppState.mode = "child";
-      AppState.childView = AppState.childModeConfig.lockToSingleSection || "home";
+      landOnChildOrParent();
     } else if (children.length === 1) {
       loadChildIntoProfile(children[0]);
-      AppState.mode = "child";
-      AppState.childView = AppState.childModeConfig.lockToSingleSection || "home";
+      landOnChildOrParent();
     } else if (children.length === 0) {
       resetProfileFieldsForNewChild();
       AppState.mode = "onboard-child";
@@ -266,8 +280,7 @@ async function bootAfterAuth() {
       AppState.authError = "Your session has expired. Please sign in again.";
     } else if (AppState.activeChildId) {
       // Offline: keep using the cached profile already on this device.
-      AppState.mode = "child";
-      AppState.childView = AppState.childModeConfig.lockToSingleSection || "home";
+      landOnChildOrParent();
     } else {
       AppState.mode = "auth";
       AppState.authError = "Could not reach the server. Please check your connection and try again.";
@@ -1373,8 +1386,12 @@ const Actions = {
             const child = await apiCreateChild(AppState.child.name || "My child", buildProfileSnapshot());
             AppState.children.push(child);
             AppState.activeChildId = child.id;
-            AppState.mode = "child";
-            AppState.childView = AppState.childModeConfig.lockToSingleSection || "home";
+            // Land in the Parent dashboard right after creating a profile —
+            // there's setup (photos, board, PIN confirmation) a parent will
+            // want to do before handing the device over. Child Mode only
+            // becomes the default on the *next* sign-in (see bootAfterAuth).
+            AppState.mode = "parent";
+            AppState.dashTab = "profile";
             saveState();
           } catch (e) {
             AppState.onboardingPinError = e.offline
@@ -1404,6 +1421,8 @@ const Actions = {
     AppState.mode = "child";
     AppState.childView = "home";
     AppState.sentenceStrip = [];
+    AppState.hasLockedChildMode = true;
+    schedulePushProfile();
     saveState();
     render();
     try {
