@@ -969,6 +969,7 @@ function renderTabVoice() {
   const cat = cats.find((c) => c.id === activeId);
   return `
     <h2>My Voice — Communication Board Editor</h2>
+    <div class="banner">⚠️ This board is a support tool, not a replacement for professional guidance. For the best results, set it up alongside a speech and language therapist or other relevant professional who knows your child — they can help make sure the words, images and categories genuinely fit your child's needs.</div>
     <div class="card">
       <div class="row">
         ${cats.map(c => `<button class="small-btn ${c.id===activeId?"active":""}" data-action="editVoiceCategory" data-id="${c.id}" style="border-left:5px solid ${c.color};">${esc(c.name)} ${c.priority?"⭐":""}</button>`).join("")}
@@ -1033,6 +1034,7 @@ function renderTabWords() {
   const anims = ["wave","bounce","pulse","shake","spin"];
   return `
     <h2>Words & Actions Editor</h2>
+    <div class="banner">⚠️ This board is a support tool, not a replacement for professional guidance. For the best results, set it up alongside a speech and language therapist or other relevant professional who knows your child — they can help make sure the words and actions genuinely fit your child's needs.</div>
     <div class="card">
       <button class="pill-btn" data-action="addWordAction">➕ Add word or action</button>
       <div class="item-list">
