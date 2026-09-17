@@ -64,6 +64,8 @@ function defaultState() {
 
 const PROFILE_KEYS = ["child", "security", "settings", "childModeConfig", "photoCategories", "voiceCategories", "wordsActions", "usageHistoryEnabled", "usageHistory"];
 
+const PROFILE_ICONS = ["🧒", "👦", "👧", "🧑", "😊", "🌟", "🚗", "⚽", "🎨", "🦖", "🐶", "🐱", "🦄", "🌈", "🚀", "🎵", "📚", "🧩", "⭐", "🎈"];
+
 let AppState = loadState();
 let ActiveRecording = null;
 let pinFailCount = 0;
@@ -443,7 +445,8 @@ function render() {
   if (!booting && AppState.showDeleteAccountModal) html += renderDeleteAccountModal();
   root.innerHTML = html;
   hydrateMediaEls();
-  document.body.style.background = AppState.settings.bgColor;
+  document.body.style.backgroundColor = AppState.settings.bgColor;
+  document.body.classList.toggle("child-mode-bg", !booting && AppState.mode === "child");
 }
 
 function renderLoading() {
@@ -519,7 +522,7 @@ function renderOnboarding() {
       </div>
       <div class="field">
         <label>Profile icon</label>
-        <div class="row">${["🧒","👦","👧","🧑","😊","🌟"].map(e => `<button class="icon-btn" data-action="onboardEmoji" data-val="${e}" style="${e===AppState.child.emoji ? 'outline:3px solid var(--accent)':''}">${e}</button>`).join("")}</div>
+        <div class="row">${PROFILE_ICONS.map(e => `<button class="icon-btn" data-action="onboardEmoji" data-val="${e}" style="${e===AppState.child.emoji ? 'outline:3px solid var(--accent)':''}">${e}</button>`).join("")}</div>
       </div>
       <button class="pill-btn" data-action="onboardSaveName">Continue</button>`;
   } else if (step === 3) {
@@ -871,7 +874,7 @@ function renderTabProfile() {
       </div>
       <div class="field">
         <label>Profile icon</label>
-        <div class="row">${["🧒","👦","👧","🧑","😊","🌟","🚗","⚽","🎨","🦖"].map(e => `<button class="icon-btn" data-action="setChildEmoji" data-val="${e}" style="${e===AppState.child.emoji ? "outline:3px solid var(--accent);":""}">${e}</button>`).join("")}</div>
+        <div class="row">${PROFILE_ICONS.map(e => `<button class="icon-btn" data-action="setChildEmoji" data-val="${e}" style="${e===AppState.child.emoji ? "outline:3px solid var(--accent);":""}">${e}</button>`).join("")}</div>
       </div>
     </div>
     <div class="card">
@@ -1258,8 +1261,19 @@ const Actions = {
     AppState.authError = "";
     render();
     try {
-      const fn = (AppState.authMode || "login") === "login" ? apiLogin : apiRegister;
+      const isRegister = (AppState.authMode || "login") === "register";
+      const fn = isRegister ? apiRegister : apiLogin;
       const result = await fn(email, password);
+      if (isRegister || (AppState.account.email && AppState.account.email !== result.parent.email)) {
+        // A brand-new account can't have any children yet, and switching to a
+        // different account on this device must never inherit whatever child
+        // was cached locally (including if the next network call fails) —
+        // this is what was letting people land straight in Child Mode right
+        // after creating an account, instead of the create-profile screen.
+        AppState.activeChildId = null;
+        AppState.children = [];
+        resetProfileFieldsForNewChild();
+      }
       AppState.account = { token: result.token, email: result.parent.email };
       AppState.authBusy = false;
       await bootAfterAuth();
