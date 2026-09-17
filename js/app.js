@@ -25,9 +25,9 @@ function defaultState() {
       buttonSize: "large",
       textSize: "medium",
       showText: true,
-      bgColor: "#eaf4ff",
+      bgColor: "#fff4ec",
       buttonColor: "#ffffff",
-      accentColor: "#3b82f6",
+      accentColor: "#ff6b4a",
       voiceName: null,
       voiceRate: 1,
       voicePitch: 1,
@@ -478,7 +478,7 @@ function renderAuthScreen() {
   const authMode = AppState.authMode || "login";
   return `<div class="screen"><div class="modal-overlay"><div class="modal-card">
     <h2>${authMode === "login" ? "Sign in" : "Create your parent account"}</h2>
-    ${authMode === "register" ? `<p style="color:#6b7280;font-size:14px;">My Voice and Safe Space is a personal, parent-managed communication tool. It does not replace professional advice or an individually assessed communication system, and it is not officially affiliated with PECS. Your account and each child's board/settings sync securely so you can sign in on other devices. Photos, videos and voice recordings always stay only on the device that captured them.</p>` : ""}
+    ${authMode === "register" ? `<p style="color:#6b7280;font-size:14px;">My Voice and Safe Space helps people with communication difficulties be heard, in a space built to keep them safe. It does not replace professional advice or an individually assessed communication system, and it is not officially affiliated with PECS. Your account and each child's board/settings sync securely so you can sign in on other devices. Photos, videos and voice recordings always stay only on the device that captured them.</p>` : ""}
     ${AppState.authError ? `<div class="banner">${esc(AppState.authError)}</div>` : ""}
     <div class="field"><label for="auth-email">Email</label><input id="auth-email" type="email" autocomplete="username" value="${esc(AppState.authEmail || "")}" /></div>
     <div class="field"><label for="auth-password">Password</label><input id="auth-password" type="password" autocomplete="${authMode === "login" ? "current-password" : "new-password"}" /></div>
@@ -1228,7 +1228,7 @@ function renderTabAbout() {
   return `
     <h2>About</h2>
     <div class="card">
-      <p><strong>My Voice and Safe Space</strong> is a personal, parent-managed communication and sensory-support tool.</p>
+      <p><strong>My Voice and Safe Space</strong> helps people with communication difficulties — including non-speaking and minimally-verbal children, and anyone who communicates better with pictures and voice than with typing or speech — be heard, in a space a parent or carer has built to keep them safe.</p>
       <p>It is an assistive communication aid and personal support tool. It is not a medical device, does not diagnose or infer emotions, and does not replace professional advice or an individually assessed communication system from a speech and language professional.</p>
       <p>It is not officially affiliated with PECS (Picture Exchange Communication System) or any other proprietary communication approach. It is designed to sit alongside a child's existing, individually assessed communication system where one is in place.</p>
       <p>Version 1.0 (MVP)</p>

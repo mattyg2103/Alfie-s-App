@@ -1,7 +1,7 @@
 :root {
-  --bg: #eaf4ff;
+  --bg: #fff4ec;
   --btn: #ffffff;
-  --accent: #3b82f6;
+  --accent: #ff6b4a;
   --text: #1f2937;
   --radius: 20px;
   --btn-size: 168px;
@@ -112,7 +112,7 @@ img, video { -webkit-user-drag: none; user-select: none; }
 
 .category-tabs { display: flex; gap: 10px; padding: 14px 20px 0; overflow-x: auto; }
 .category-tab {
-  border: none; background: #dbeafe; color: #1f2937; padding: 12px 20px; border-radius: 999px;
+  border: none; background: #ffe4d9; color: #1f2937; padding: 12px 20px; border-radius: 999px;
   font-size: 16px; font-weight: 600; white-space: nowrap; min-height: 48px;
 }
 .category-tab.active { background: var(--accent); color: white; }
@@ -120,10 +120,10 @@ img, video { -webkit-user-drag: none; user-select: none; }
 /* ---------- Sentence strip ---------- */
 .sentence-bar {
   display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #fff;
-  border-bottom: 2px solid #dbeafe; flex-wrap: wrap;
+  border-bottom: 2px solid #ffe4d9; flex-wrap: wrap;
 }
 .sentence-strip { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; min-height: 56px; align-items: center; }
-.sentence-chip { background: #dbeafe; border-radius: 12px; padding: 8px 12px; font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.sentence-chip { background: #ffe4d9; border-radius: 12px; padding: 8px 12px; font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
 .sentence-chip .e { font-size: 24px; }
 
 /* ---------- Photo viewer ---------- */
@@ -153,12 +153,12 @@ img, video { -webkit-user-drag: none; user-select: none; }
 .loading-screen { align-items: center; justify-content: center; }
 .loading-spinner {
   width: 48px; height: 48px; border-radius: 50%;
-  border: 5px solid #dbeafe; border-top-color: var(--accent);
+  border: 5px solid #ffe4d9; border-top-color: var(--accent);
   animation: spinLoader 0.8s linear infinite;
 }
 @keyframes spinLoader { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
-  .loading-spinner { animation: none; border-top-color: #dbeafe; }
+  .loading-spinner { animation: none; border-top-color: #ffe4d9; }
 }
 
 /* ---------- Onboarding / modals ---------- */
@@ -207,7 +207,7 @@ img, video { -webkit-user-drag: none; user-select: none; }
 .item-card { border: 2px solid #e5e7eb; border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
 .item-card .thumb { width: 100%; height: 110px; object-fit: cover; border-radius: 10px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; font-size: 40px; }
 .item-card.hidden-item { opacity: 0.5; }
-.tag { display: inline-block; background: #e0e7ff; color: #3730a3; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.tag { display: inline-block; background: #ffe4d9; color: #9a3412; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
 .small-btn { font-size: 13px; padding: 8px 12px; border-radius: 8px; border: none; background: #e5e7eb; }
 .small-btn.danger { background: #fee2e2; color: #b91c1c; }
 .small-btn.active { background: var(--accent); color: white; }
@@ -221,7 +221,7 @@ img, video { -webkit-user-drag: none; user-select: none; }
 .preview-frame { border: 10px solid #1e293b; border-radius: 32px; overflow: hidden; max-width: 480px; margin: 0 auto; }
 .preview-inner { min-height: 640px; max-height: 640px; overflow-y: auto; }
 .banner { background: #fef3c7; border: 1px solid #f59e0b; border-radius: 12px; padding: 12px 16px; font-size: 14px; margin-bottom: 16px; }
-.info-banner { background: #dbeafe; border: 1px solid #3b82f6; border-radius: 12px; padding: 12px 16px; font-size: 14px; margin-bottom: 16px; }
+.info-banner { background: #ffe4d9; border: 1px solid #ff6b4a; border-radius: 12px; padding: 12px 16px; font-size: 14px; margin-bottom: 16px; }
 .color-swatch { width: 40px; height: 40px; border-radius: 10px; border: 2px solid #d1d5db; padding: 0; }
 .empty-state { text-align: center; padding: 40px 20px; color: #6b7280; }
 

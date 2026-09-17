@@ -1,10 +1,12 @@
 # My Voice and Safe Space
 
-A private, parent-managed communication and sensory-support web app for a
-non-speaking autistic child. It is an assistive communication and personal
-support tool — it does not replace professional advice or an individually
-assessed communication system, and it is not officially affiliated with
-PECS or any other proprietary communication approach.
+A private, parent-managed web app that helps people with communication
+difficulties — non-speaking and minimally-verbal children in particular —
+be heard, in a space built to keep them safe. It is an assistive
+communication and personal support tool — it does not replace professional
+advice or an individually assessed communication system, and it is not
+officially affiliated with PECS or any other proprietary communication
+approach.
 
 ## Why a website
 
