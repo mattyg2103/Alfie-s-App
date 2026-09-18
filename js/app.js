@@ -636,6 +636,11 @@ function esc(str) {
 function renderAuthScreen() {
   const authMode = AppState.authMode || "login";
   return `<div class="screen"><div class="modal-overlay"><div class="modal-card">
+    <div class="auth-brand">
+      <div class="auth-logo"><img src="icons/icon.svg" alt="My Voice and Safe Space logo" /></div>
+      <div class="auth-name">My Voice and Safe Space</div>
+      <p class="auth-slogan">Helping people with communication difficulties be heard, in a space built to keep them safe.</p>
+    </div>
     <h2>${authMode === "login" ? "Sign in" : "Create your parent account"}</h2>
     ${authMode === "register" ? `<p style="color:#6b7280;font-size:14px;">My Voice and Safe Space helps people with communication difficulties be heard, in a space built to keep them safe. It does not replace professional advice or an individually assessed communication system, and it is not officially affiliated with PECS. Your account and each child's board/settings sync securely so you can sign in on other devices. Photos, videos and voice recordings always stay only on the device that captured them.</p>` : ""}
     ${AppState.authError ? `<div class="banner">${esc(AppState.authError)}</div>` : ""}
@@ -1220,9 +1225,9 @@ function renderTabAudio() {
           ${voices.map(v => `<option value="${esc(v.name)}" ${AppState.settings.voiceName===v.name?"selected":""}>${esc(v.name)} (${esc(v.lang)})</option>`).join("")}
         </select>
       </div>
-      <div class="field"><label>Speed: ${AppState.settings.voiceRate.toFixed(2)}</label><input type="range" min="0.5" max="1.5" step="0.05" value="${AppState.settings.voiceRate}" data-action-input="setVoiceRate" /></div>
-      <div class="field"><label>Pitch: ${AppState.settings.voicePitch.toFixed(2)}</label><input type="range" min="0.5" max="1.5" step="0.05" value="${AppState.settings.voicePitch}" data-action-input="setVoicePitch" /></div>
-      <div class="field"><label>Volume: ${Math.round(AppState.settings.voiceVolume*100)}%</label><input type="range" min="0" max="1" step="0.05" value="${AppState.settings.voiceVolume}" data-action-input="setVoiceVolume" /></div>
+      <div class="field"><label id="voice-rate-label">Speed: ${AppState.settings.voiceRate.toFixed(2)}</label><input type="range" min="0.5" max="1.5" step="0.05" value="${AppState.settings.voiceRate}" data-action-input="setVoiceRate" /></div>
+      <div class="field"><label id="voice-pitch-label">Pitch: ${AppState.settings.voicePitch.toFixed(2)}</label><input type="range" min="0.5" max="1.5" step="0.05" value="${AppState.settings.voicePitch}" data-action-input="setVoicePitch" /></div>
+      <div class="field"><label id="voice-volume-label">Volume: ${Math.round(AppState.settings.voiceVolume*100)}%</label><input type="range" min="0" max="1" step="0.05" value="${AppState.settings.voiceVolume}" data-action-input="setVoiceVolume" /></div>
       <button class="pill-btn secondary" data-action="testVoice">🔊 Test voice</button>
       <div class="toggle-row"><span>Speak full phrase (off = speak just the word)</span><label class="switch"><input type="checkbox" ${AppState.settings.speakFullPhrase?"checked":""} data-action-change="toggleSetting" data-key="speakFullPhrase" /><span class="slider"></span></label></div>
     </div>`;
@@ -1311,7 +1316,7 @@ function renderTabLayout() {
       <div class="toggle-row"><span>Vibrate on selection</span><label class="switch"><input type="checkbox" ${s.vibrate?"checked":""} data-action-change="toggleSetting" data-key="vibrate" /><span class="slider"></span></label></div>
       <div class="toggle-row"><span>Animations (Words & Actions)</span><label class="switch"><input type="checkbox" ${s.animationsEnabled?"checked":""} data-action-change="toggleSetting" data-key="animationsEnabled" /><span class="slider"></span></label></div>
       <div class="toggle-row"><span>Require confirmation before speaking</span><label class="switch"><input type="checkbox" ${s.confirmSelections?"checked":""} data-action-change="toggleSetting" data-key="confirmSelections" /><span class="slider"></span></label></div>
-      <div class="field"><label>Delay before a second selection is accepted: ${s.selectionDelayMs}ms</label><input type="range" min="0" max="2000" step="100" value="${s.selectionDelayMs}" data-action-input="setSelectionDelay" /></div>
+      <div class="field"><label id="selection-delay-label">Delay before a second selection is accepted: ${s.selectionDelayMs}ms</label><input type="range" min="0" max="2000" step="100" value="${s.selectionDelayMs}" data-action-input="setSelectionDelay" /></div>
       <div class="toggle-row"><span>Enable sentence builder in My Voice</span><label class="switch"><input type="checkbox" ${s.sentenceBuilderEnabled?"checked":""} data-action-change="toggleSetting" data-key="sentenceBuilderEnabled" /><span class="slider"></span></label></div>
     </div>
     <div class="card">
@@ -2023,10 +2028,30 @@ const ChangeActions = {
 };
 
 const InputActions = {
-  setVoiceRate(el) { AppState.settings.voiceRate = Number(el.value); saveState(); },
-  setVoicePitch(el) { AppState.settings.voicePitch = Number(el.value); saveState(); },
-  setVoiceVolume(el) { AppState.settings.voiceVolume = Number(el.value); saveState(); },
-  setSelectionDelay(el) { AppState.settings.selectionDelayMs = Number(el.value); saveState(); },
+  setVoiceRate(el) {
+    AppState.settings.voiceRate = Number(el.value);
+    saveState();
+    const label = document.getElementById("voice-rate-label");
+    if (label) label.textContent = "Speed: " + AppState.settings.voiceRate.toFixed(2);
+  },
+  setVoicePitch(el) {
+    AppState.settings.voicePitch = Number(el.value);
+    saveState();
+    const label = document.getElementById("voice-pitch-label");
+    if (label) label.textContent = "Pitch: " + AppState.settings.voicePitch.toFixed(2);
+  },
+  setVoiceVolume(el) {
+    AppState.settings.voiceVolume = Number(el.value);
+    saveState();
+    const label = document.getElementById("voice-volume-label");
+    if (label) label.textContent = "Volume: " + Math.round(AppState.settings.voiceVolume * 100) + "%";
+  },
+  setSelectionDelay(el) {
+    AppState.settings.selectionDelayMs = Number(el.value);
+    saveState();
+    const label = document.getElementById("selection-delay-label");
+    if (label) label.textContent = "Delay before a second selection is accepted: " + AppState.settings.selectionDelayMs + "ms";
+  },
 };
 
 const FileActions = {
@@ -2173,11 +2198,34 @@ function printVoiceBoard() {
 /* =========================================================================
    EVENT DELEGATION
    ========================================================================= */
-document.addEventListener("click", (e) => {
-  const el = e.target.closest("[data-action]");
+// Some touchscreen laptops fail to fire a synthetic "click" for a real
+// physical mouse click near the edge of the screen (a known Chromium/Windows
+// quirk on hybrid touch+mouse devices — reported for the PIN pad). Handling
+// "pointerup" as a fallback, deduped against a click landing on the same
+// element shortly after, makes every data-action button work reliably
+// whichever event the browser actually delivers.
+let pendingPointerAction = null;
+function dispatchDataAction(el, e) {
   if (el && Actions[el.dataset.action]) {
     Actions[el.dataset.action](el, e);
   }
+}
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-action]");
+  if (!el) return;
+  pendingPointerAction = null;
+  dispatchDataAction(el, e);
+});
+document.addEventListener("pointerup", (e) => {
+  const el = e.target.closest("[data-action]");
+  if (!el) return;
+  pendingPointerAction = el;
+  setTimeout(() => {
+    if (pendingPointerAction === el) {
+      pendingPointerAction = null;
+      dispatchDataAction(el, e);
+    }
+  }, 250);
 });
 document.addEventListener("change", (e) => {
   const el = e.target.closest("[data-action-change]");
