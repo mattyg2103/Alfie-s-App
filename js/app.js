@@ -803,6 +803,7 @@ function navigatePhotoBy(dir) {
   const next = AppState.childPhotoIndex + dir;
   if (next >= 0 && next < list.length) {
     AppState.childPhotoIndex = next;
+    AppState.childPhotoEnterDir = dir;
     logUsage("photos", (list[next] || {}).name || "");
     render();
   }
@@ -813,6 +814,9 @@ function renderChildPhotoViewer() {
   const item = list[AppState.childPhotoIndex];
   if (!item) return renderChildPhotosGrid();
   const showHome = AppState.childModeConfig.showHomeButtonInPhotos;
+  const enterDir = AppState.childPhotoEnterDir;
+  AppState.childPhotoEnterDir = null;
+  const enterClass = enterDir === 1 ? "viewer-enter-right" : enterDir === -1 ? "viewer-enter-left" : "";
   return `
     <div class="viewer">
       <div class="topbar">
@@ -822,8 +826,8 @@ function renderChildPhotoViewer() {
       </div>
       <div class="viewer-media">
         ${item.type === "video"
-          ? `<video data-file-id="${item.fileId}" controls ${AppState.settings.videoAutoplay ? "autoplay" : ""} ${AppState.settings.videoLoop ? "loop" : ""} playsinline></video>`
-          : `<img data-file-id="${item.fileId}" alt="" />`}
+          ? `<video class="${enterClass}" data-file-id="${item.fileId}" controls ${AppState.settings.videoAutoplay ? "autoplay" : ""} ${AppState.settings.videoLoop ? "loop" : ""} playsinline></video>`
+          : `<img class="${enterClass}" data-file-id="${item.fileId}" alt="" />`}
       </div>
       <div class="viewer-caption">${esc(item.name)}</div>
       <div class="viewer-controls">
@@ -2271,24 +2275,54 @@ document.addEventListener("input", (e) => {
   }
 });
 
-// Swipe through the photo/video viewer: swipe right for the next item,
-// swipe left to go back. The Previous/Next buttons stay too, as a
+// Seamless swipe through the photo/video viewer: the photo tracks your
+// finger in real time as you drag (touchmove), then either completes the
+// swipe with a matching slide-out/slide-in or snaps back if the drag
+// didn't go far enough. Dragging right moves the photo right, revealing
+// the previous item from the left — dragging left moves it left, revealing
+// the next item from the right. The Previous/Next buttons stay too, as a
 // no-gesture-required alternative (some children can't reliably swipe).
 const SWIPE_THRESHOLD_PX = 50;
-let swipeStart = null;
+let photoSwipe = null; // { x, y, container, mediaEl, dragging }
 document.addEventListener("touchstart", (e) => {
-  const viewer = e.target.closest(".viewer-media");
-  if (!viewer || e.touches.length !== 1) { swipeStart = null; return; }
-  swipeStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  const container = e.target.closest(".viewer-media");
+  if (!container || e.touches.length !== 1) { photoSwipe = null; return; }
+  const mediaEl = container.querySelector("img, video");
+  photoSwipe = { x: e.touches[0].clientX, y: e.touches[0].clientY, container, mediaEl, dragging: false };
+}, { passive: true });
+document.addEventListener("touchmove", (e) => {
+  if (!photoSwipe || !photoSwipe.mediaEl) return;
+  const t = e.touches[0];
+  const dx = t.clientX - photoSwipe.x;
+  const dy = t.clientY - photoSwipe.y;
+  if (!photoSwipe.dragging) {
+    if (Math.abs(dx) < 6 || Math.abs(dx) < Math.abs(dy)) return;
+    photoSwipe.dragging = true;
+    photoSwipe.container.classList.add("dragging");
+  }
+  photoSwipe.mediaEl.style.transform = `translateX(${dx}px)`;
+  photoSwipe.mediaEl.style.opacity = String(Math.max(1 - Math.abs(dx) / 400, 0.4));
 }, { passive: true });
 document.addEventListener("touchend", (e) => {
-  if (!swipeStart) return;
+  if (!photoSwipe) return;
+  const { mediaEl, container, x, dragging } = photoSwipe;
+  photoSwipe = null;
+  if (!mediaEl || !dragging) return;
+  container.classList.remove("dragging");
   const t = e.changedTouches[0];
-  const dx = t.clientX - swipeStart.x;
-  const dy = t.clientY - swipeStart.y;
-  swipeStart = null;
-  if (Math.abs(dx) < SWIPE_THRESHOLD_PX || Math.abs(dx) < Math.abs(dy)) return;
-  navigatePhotoBy(dx > 0 ? 1 : -1);
+  const dx = t.clientX - x;
+  const dir = dx > 0 ? -1 : 1;
+  const list = currentPhotoList();
+  const canMove = AppState.childPhotoIndex + dir >= 0 && AppState.childPhotoIndex + dir < list.length;
+  mediaEl.style.transition = "transform 0.18s ease, opacity 0.18s ease";
+  if (Math.abs(dx) >= SWIPE_THRESHOLD_PX && canMove) {
+    mediaEl.style.transform = `translateX(${(dx > 0 ? 1 : -1) * 400}px)`;
+    mediaEl.style.opacity = "0";
+    setTimeout(() => navigatePhotoBy(dir), 160);
+  } else {
+    mediaEl.style.transform = "translateX(0)";
+    mediaEl.style.opacity = "1";
+  }
 }, { passive: true });
 
 // Best-effort back-button trap while Child Mode is active.
