@@ -149,6 +149,17 @@ img, video { -webkit-user-drag: none; user-select: none; }
 @keyframes shakeA { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-10px)} 75%{transform:translateX(10px)} }
 @keyframes spinA { from{transform:rotate(0)} to{transform:rotate(360deg)} }
 
+/* ---------- Intro video ---------- */
+.intro-screen {
+  align-items: center; justify-content: center; background: #0f172a; position: relative;
+}
+.intro-video { width: 100%; max-width: 960px; max-height: 100%; }
+.intro-skip {
+  position: absolute;
+  top: calc(18px + env(safe-area-inset-top, 0px));
+  right: calc(18px + env(safe-area-inset-right, 0px));
+}
+
 /* ---------- Loading ---------- */
 .loading-screen { align-items: center; justify-content: center; }
 .loading-spinner {

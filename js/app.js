@@ -7,6 +7,7 @@ const MVSS_STATE_KEY = "mvss_state_v1";
 
 function defaultState() {
   return {
+    introSeen: false,
     account: { token: null, email: null },
     children: [],
     activeChildId: null,
@@ -219,6 +220,11 @@ async function flushProfilePush() {
    BOOT — decides auth / picker / onboarding / child / parent on launch
    ========================================================================= */
 async function boot() {
+  if (!AppState.introSeen) {
+    AppState.mode = "intro";
+    render();
+    return;
+  }
   if (!AppState.account.token) {
     AppState.mode = "auth";
     render();
@@ -449,6 +455,7 @@ function render() {
   const root = document.getElementById("app");
   let html;
   if (booting) html = renderLoading();
+  else if (AppState.mode === "intro") html = renderIntroVideo();
   else if (AppState.mode === "auth") html = renderAuthScreen();
   else if (AppState.mode === "onboard-child") html = renderOnboarding();
   else if (AppState.mode === "picker") html = renderChildPicker();
@@ -456,13 +463,44 @@ function render() {
   else html = renderParentDashboard();
   if (!booting && AppState.showUnlockModal) html += renderUnlockModal();
   if (!booting && AppState.showDeleteAccountModal) html += renderDeleteAccountModal();
+  if (!booting && AppState.showIntroReplay) html += renderIntroReplayModal();
   root.innerHTML = html;
   hydrateMediaEls();
+  hydrateIntroVideo();
   document.body.style.backgroundColor = AppState.settings.bgColor;
+}
+
+function hydrateIntroVideo() {
+  const vid = document.getElementById("intro-video");
+  if (vid) vid.addEventListener("ended", () => Actions.introFinish());
 }
 
 function renderLoading() {
   return `<div class="screen loading-screen"><div class="loading-spinner" aria-label="Loading"></div></div>`;
+}
+
+function renderIntroVideo() {
+  return `
+    <div class="screen intro-screen">
+      <video id="intro-video" class="intro-video" autoplay muted playsinline>
+        <source src="assets/intro.webm" type="video/webm" />
+        <source src="assets/intro.mp4" type="video/mp4" />
+      </video>
+      <button class="pill-btn secondary intro-skip" data-action="introFinish">Skip</button>
+    </div>`;
+}
+
+function renderIntroReplayModal() {
+  return `
+    <div class="modal-overlay">
+      <div class="modal-card" style="padding:10px;max-width:640px;">
+        <video class="intro-video" style="border-radius:14px;" autoplay controls playsinline>
+          <source src="assets/intro.webm" type="video/webm" />
+          <source src="assets/intro.mp4" type="video/mp4" />
+        </video>
+        <button class="pill-btn" style="margin-top:12px;width:100%;" data-action="closeIntroReplay">Close</button>
+      </div>
+    </div>`;
 }
 
 function hydrateMediaEls() {
@@ -1228,6 +1266,11 @@ function renderTabHelp() {
   return `
     <h2>Help & Support</h2>
     <div class="card">
+      <h2 style="font-size:16px;margin-top:0;">How it works</h2>
+      <p style="color:#6b7280;font-size:14px;">A short intro video plays the first time this app is opened on a device. You can watch it again any time.</p>
+      <button class="pill-btn secondary" data-action="watchIntroAgain">▶ Watch the intro video again</button>
+    </div>
+    <div class="card">
       <h2 style="font-size:16px;">Getting started</h2>
       <p>1. Add favourite photos and short videos in the <strong>Photo & Video Library</strong>.</p>
       <p>2. Personalise buttons in <strong>My Voice Editor</strong> and <strong>Words & Actions Editor</strong> — add real photos, record your own voice, and edit the wording.</p>
@@ -1709,6 +1752,15 @@ const Actions = {
 
   /* Audio settings */
   testVoice() { speakText("Hello! This is how my voice sounds."); },
+
+  /* Intro video */
+  introFinish() {
+    AppState.introSeen = true;
+    saveState();
+    boot();
+  },
+  watchIntroAgain() { AppState.showIntroReplay = true; render(); },
+  closeIntroReplay() { AppState.showIntroReplay = false; render(); },
 
   /* Child mode settings */
   async changePin() {
