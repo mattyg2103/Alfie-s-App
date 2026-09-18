@@ -567,6 +567,7 @@ function render() {
   else if (AppState.mode === "child") html = renderChildMode(false);
   else html = renderParentDashboard();
   if (!booting && AppState.showUnlockModal) html += renderUnlockModal();
+  if (!booting && AppState.showLockReminder) html += renderLockReminderModal();
   if (!booting && AppState.showDeleteAccountModal) html += renderDeleteAccountModal();
   if (!booting && AppState.showIntroReplay) html += renderIntroReplayModal();
   root.innerHTML = html;
@@ -957,6 +958,23 @@ function renderUnlockModal() {
     </div>`;
 }
 
+function renderLockReminderModal() {
+  return `
+    <div class="modal-overlay">
+      <div class="modal-card" style="text-align:center;">
+        <div style="font-size:44px;">🔒</div>
+        <h2>Before you hand over the device</h2>
+        <p style="color:#6b7280;font-size:14px;text-align:left;">Child Mode hides settings and traps the back button, but a swipe up to the Home Screen (or Recent Apps) happens at the operating-system level — no website can block it. For a true lock, turn on your device's own lock feature first:</p>
+        <p style="font-size:14px;text-align:left;"><strong>iPad / iPhone (Guided Access):</strong> Settings → Accessibility → Guided Access → turn on. Then triple-click the side/home button once the app is open, and set a Guided Access passcode.</p>
+        <p style="font-size:14px;text-align:left;"><strong>Android (Screen Pinning):</strong> Settings → Security → More security settings → App pinning → turn on. Open the app, then use Recent Apps and tap the pin icon on this app's card.</p>
+        <div class="row" style="justify-content:center;margin-top:10px;">
+          <button class="pill-btn secondary" data-action="cancelLockReminder">Not now</button>
+          <button class="pill-btn" data-action="lockChildMode">🔒 Lock into Child Mode</button>
+        </div>
+      </div>
+    </div>`;
+}
+
 function renderDeleteAccountModal() {
   return `
     <div class="modal-overlay">
@@ -1001,7 +1019,7 @@ function renderParentDashboard() {
         <h1>My Voice and Safe Space<br/><small style="font-weight:400;opacity:.7;">Parent Mode</small></h1>
         ${DASH_TABS.map(([id, label]) => `<button class="${tab === id ? "active" : ""}" data-action="setDashTab" data-tab="${id}">${label}</button>`).join("")}
         <div class="dash-nav-spacer"></div>
-        <button class="pill-btn" style="margin-top:14px;" data-action="lockChildMode">🔒 Lock into Child Mode</button>
+        <button class="pill-btn" style="margin-top:14px;" data-action="requestLockChildMode">🔒 Lock into Child Mode</button>
       </nav>
       <main class="dash-content">
         ${renderDashTab(tab)}
@@ -1581,7 +1599,16 @@ const Actions = {
   },
 
   /* Mode switching */
+  requestLockChildMode() {
+    AppState.showLockReminder = true;
+    render();
+  },
+  cancelLockReminder() {
+    AppState.showLockReminder = false;
+    render();
+  },
   lockChildMode() {
+    AppState.showLockReminder = false;
     AppState.mode = "child";
     AppState.childView = "home";
     AppState.sentenceStrip = [];
