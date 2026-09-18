@@ -84,6 +84,18 @@ img, video { -webkit-user-drag: none; user-select: none; }
 }
 .parent-access-btn:active { opacity: 0.8; transform: scale(0.92); }
 
+.music-toggle-btn {
+  position: fixed;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  left: calc(14px + env(safe-area-inset-left, 0px));
+  width: 56px; height: 56px;
+  border-radius: 50%; background: var(--btn); color: var(--accent); border: none;
+  font-size: 22px; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.12);
+  z-index: 50; touch-action: manipulation;
+}
+.music-toggle-btn:active { transform: scale(0.92); }
+
 .link-btn {
   background: none; border: none; color: var(--accent); text-decoration: underline;
   font: inherit; cursor: pointer; padding: 0;

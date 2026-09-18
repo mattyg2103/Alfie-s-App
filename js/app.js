@@ -43,6 +43,7 @@ function defaultState() {
       videoAutoplay: false,
       videoLoop: false,
       videoMaxDurationSec: 30,
+      backgroundMusicEnabled: false,
     },
     childModeConfig: {
       sectionsVisible: { photos: true, voice: true, words: true },
@@ -408,6 +409,9 @@ function speakText(text) {
     utter.rate = AppState.settings.voiceRate;
     utter.pitch = AppState.settings.voicePitch;
     utter.volume = AppState.settings.voiceVolume;
+    utter.onstart = duckMusic;
+    utter.onend = unduckMusic;
+    utter.onerror = unduckMusic;
     speechSynthesis.speak(utter);
   } catch (e) {
     console.error("Speech failed", e);
@@ -431,6 +435,107 @@ function logUsage(section, label) {
   if (!AppState.usageHistoryEnabled) return;
   AppState.usageHistory.unshift({ ts: Date.now(), section, label });
   AppState.usageHistory = AppState.usageHistory.slice(0, 200);
+}
+
+/* =========================================================================
+   BACKGROUND MUSIC — a soft, generated ambient pad (Web Audio API only,
+   no audio files, so there's nothing to license). Off by default, only
+   ever plays in Child Mode, and ducks to near-silent the instant anything
+   is spoken so it never competes with the board — sound in Child Mode
+   should still be led by the child's own selections, this just adds a
+   calm bed underneath when a parent chooses to turn it on.
+   ========================================================================= */
+let musicCtx = null;
+let musicNodes = null;
+let musicPlaying = false;
+const MUSIC_VOLUME = 0.05;
+const MUSIC_CHORDS = [
+  [261.63, 329.63, 392.0, 493.88], // Cmaj7
+  [220.0, 261.63, 329.63, 392.0], // Am7
+  [174.61, 220.0, 261.63, 349.23], // Fmaj7
+  [196.0, 246.94, 293.66, 349.23], // G6
+];
+const CHORD_SECONDS = 6;
+
+function startBackgroundMusic() {
+  if (musicPlaying) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  if (!musicCtx) musicCtx = new AC();
+  if (musicCtx.state === "suspended") musicCtx.resume().catch(() => {});
+  musicPlaying = true;
+
+  const ctx = musicCtx;
+  const masterGain = ctx.createGain();
+  masterGain.gain.value = 0;
+  masterGain.connect(ctx.destination);
+  masterGain.gain.linearRampToValueAtTime(MUSIC_VOLUME, ctx.currentTime + 2.5);
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.frequency.value = 900;
+  filter.connect(masterGain);
+
+  let chordIndex = 0;
+  function playChord() {
+    if (!musicPlaying) return;
+    const now = ctx.currentTime;
+    const chord = MUSIC_CHORDS[chordIndex % MUSIC_CHORDS.length];
+    chordIndex++;
+    chord.forEach((freq) => {
+      const osc = ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.value = freq;
+      const g = ctx.createGain();
+      g.gain.value = 0;
+      osc.connect(g);
+      g.connect(filter);
+      osc.start(now);
+      g.gain.linearRampToValueAtTime(1, now + 1.4);
+      g.gain.linearRampToValueAtTime(0, now + CHORD_SECONDS - 0.5);
+      osc.stop(now + CHORD_SECONDS);
+    });
+  }
+  playChord();
+  const chordTimer = setInterval(playChord, CHORD_SECONDS * 1000);
+  musicNodes = { masterGain, chordTimer };
+}
+
+function stopBackgroundMusic() {
+  if (!musicPlaying) return;
+  musicPlaying = false;
+  if (musicNodes) {
+    clearInterval(musicNodes.chordTimer);
+    const g = musicNodes.masterGain;
+    const ctx = musicCtx;
+    g.gain.cancelScheduledValues(ctx.currentTime);
+    g.gain.setValueAtTime(g.gain.value, ctx.currentTime);
+    g.gain.linearRampToValueAtTime(0, ctx.currentTime + 1);
+    setTimeout(() => { try { g.disconnect(); } catch (e) {} }, 1200);
+  }
+  musicNodes = null;
+}
+
+function duckMusic() {
+  if (!musicPlaying || !musicNodes) return;
+  const ctx = musicCtx, g = musicNodes.masterGain, now = ctx.currentTime;
+  g.gain.cancelScheduledValues(now);
+  g.gain.setValueAtTime(g.gain.value, now);
+  g.gain.linearRampToValueAtTime(MUSIC_VOLUME * 0.15, now + 0.15);
+}
+
+function unduckMusic() {
+  if (!musicPlaying || !musicNodes) return;
+  const ctx = musicCtx, g = musicNodes.masterGain, now = ctx.currentTime;
+  g.gain.cancelScheduledValues(now);
+  g.gain.setValueAtTime(g.gain.value, now);
+  g.gain.linearRampToValueAtTime(MUSIC_VOLUME, now + 0.6);
+}
+
+function syncBackgroundMusic() {
+  const shouldPlay = !booting && AppState.mode === "child" && AppState.settings.backgroundMusicEnabled;
+  if (shouldPlay) startBackgroundMusic();
+  else stopBackgroundMusic();
 }
 
 /* =========================================================================
@@ -468,6 +573,7 @@ function render() {
   hydrateMediaEls();
   hydrateIntroVideo();
   document.body.style.backgroundColor = AppState.settings.bgColor;
+  syncBackgroundMusic();
 }
 
 function hydrateIntroVideo() {
@@ -624,7 +730,10 @@ function renderChildMode(embeddedUnused) {
     inner = renderChildHome();
   }
   const spot = `<button class="parent-access-btn" data-action="parentAccessTap" aria-label="Parent Access">🔒</button>`;
-  return `<div class="screen" oncontextmenu="return false">${inner}${spot}</div>`;
+  const musicToggle = AppState.settings.backgroundMusicEnabled
+    ? `<button class="music-toggle-btn" data-action="toggleMusicNow" aria-label="Turn music off">🔊</button>`
+    : "";
+  return `<div class="screen" oncontextmenu="return false">${inner}${spot}${musicToggle}</div>`;
 }
 
 function renderChildHome() {
@@ -1210,6 +1319,11 @@ function renderTabLayout() {
       <div class="toggle-row"><span>Autoplay videos</span><label class="switch"><input type="checkbox" ${s.videoAutoplay?"checked":""} data-action-change="toggleSetting" data-key="videoAutoplay" /><span class="slider"></span></label></div>
       <div class="toggle-row"><span>Loop videos</span><label class="switch"><input type="checkbox" ${s.videoLoop?"checked":""} data-action-change="toggleSetting" data-key="videoLoop" /><span class="slider"></span></label></div>
       <div class="field"><label>Suggested max video length (seconds)</label><input type="number" min="5" max="600" value="${s.videoMaxDurationSec}" data-action-change="setSetting" data-key="videoMaxDurationSec" /></div>
+    </div>
+    <div class="card">
+      <h2 style="font-size:16px;margin-top:0;">Background music</h2>
+      <div class="info-banner">Off by default. Sound in Child Mode is meant to be led by your child's own selections — only turn this on if a quiet, constant background works well for your child. It automatically pauses to near-silent the instant anything is spoken, so it never talks over the board, and there's a one-tap mute right in Child Mode too.</div>
+      <div class="toggle-row"><span>Play gentle background music in Child Mode</span><label class="switch"><input type="checkbox" ${s.backgroundMusicEnabled?"checked":""} data-action-change="toggleSetting" data-key="backgroundMusicEnabled" /><span class="slider"></span></label></div>
     </div>`;
 }
 
@@ -1487,6 +1601,10 @@ const Actions = {
       AppState.unlockError = "";
       render();
     }
+  },
+  toggleMusicNow() {
+    AppState.settings.backgroundMusicEnabled = false;
+    persistAndRender();
   },
   closeUnlockModal() { AppState.showUnlockModal = false; render(); },
   setUnlockTab(el) { AppState.unlockAuthTab = el.dataset.tab; AppState.unlockError = ""; render(); },
@@ -2117,4 +2235,11 @@ if ("serviceWorker" in navigator) {
 /* =========================================================================
    INIT
    ========================================================================= */
+const recordedAudioPlayer = document.getElementById("audio-player");
+if (recordedAudioPlayer) {
+  recordedAudioPlayer.addEventListener("play", duckMusic);
+  recordedAudioPlayer.addEventListener("ended", unduckMusic);
+  recordedAudioPlayer.addEventListener("pause", unduckMusic);
+}
+
 boot();
