@@ -1141,9 +1141,13 @@ function renderTabVoice() {
   const cats = AppState.voiceCategories;
   const activeId = AppState.editingVoiceCategory || (cats[0] && cats[0].id);
   const cat = cats.find((c) => c.id === activeId);
+  const allButtons = cats.flatMap((c) => c.buttons);
+  const withPhoto = allButtons.filter((b) => b.imageFileId).length;
   return `
     <h2>My Voice — Communication Board Editor</h2>
     <div class="banner">⚠️ This board is a support tool, not a replacement for professional guidance. For the best results, set it up alongside a speech and language therapist or other relevant professional who knows your child — they can help make sure the words, images and categories genuinely fit your child's needs.</div>
+    ${allButtons.length > 0 ? `
+    <div class="info-banner">📷 ${withPhoto} of ${allButtons.length} buttons use a real photo so far. A photo of your child's own actual cup, snack or toy is usually easier for them to recognise than the built-in symbol — look for "Add a real photo" below any button that still needs one.</div>` : ""}
     <div class="card">
       <div class="row">
         ${cats.map(c => `<button class="small-btn ${c.id===activeId?"active":""}" data-action="editVoiceCategory" data-id="${c.id}" style="border-left:5px solid ${c.color};">${esc(c.name)} ${c.priority?"⭐":""}</button>`).join("")}
@@ -1182,13 +1186,15 @@ function renderTabVoice() {
 
 function renderVoiceButtonEditor(cat, b) {
   const recording = ActiveRecording && ActiveRecording.catId === cat.id && ActiveRecording.btnId === b.id;
+  const hasPhoto = !!b.imageFileId;
   return `
     <div class="item-card ${b.hidden ? "hidden-item" : ""}">
-      <div class="thumb">${b.imageFileId ? `<img data-file-id="${b.imageFileId}" style="width:100%;height:100%;object-fit:cover;border-radius:10px;" alt="" />` : (b.emoji || "🔵")}</div>
+      <div class="thumb ${hasPhoto ? "" : "thumb-needs-photo"}">${hasPhoto ? `<img data-file-id="${b.imageFileId}" style="width:100%;height:100%;object-fit:cover;border-radius:10px;" alt="" />` : (b.emoji || "🔵")}</div>
       <div class="field"><label>Label</label><input type="text" value="${esc(b.label)}" data-action-change="editButtonField" data-cat="${cat.id}" data-btn="${b.id}" data-field="label" /></div>
       <div class="field"><label>Spoken phrase</label><input type="text" value="${esc(b.phrase)}" data-action-change="editButtonField" data-cat="${cat.id}" data-btn="${b.id}" data-field="phrase" /></div>
       <div class="field"><label>Emoji / symbol</label><input type="text" maxlength="4" value="${esc(b.emoji||"")}" data-action-change="editButtonField" data-cat="${cat.id}" data-btn="${b.id}" data-field="emoji" /></div>
-      <label class="small-btn">🖼️ Upload image<input type="file" accept="image/*" hidden data-action-file="setButtonImage" data-cat="${cat.id}" data-btn="${b.id}" /></label>
+      <label class="small-btn ${hasPhoto ? "" : "accent"}">${hasPhoto ? "🖼️ Change photo" : "📷 Add a real photo"}<input type="file" accept="image/*" hidden data-action-file="setButtonImage" data-cat="${cat.id}" data-btn="${b.id}" /></label>
+      ${!hasPhoto ? `<p style="color:#6b7280;font-size:13px;margin:6px 0 0;">Currently showing the ${b.emoji || "🔵"} symbol. A real photo of this exact item is usually easier for your child to recognise.</p>` : ""}
       ${b.audioFileId ? `<span class="tag">Has recorded voice</span>` : ""}
       <div class="row">
         ${recording
