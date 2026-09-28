@@ -1196,12 +1196,12 @@ function renderVoiceButtonEditor(cat, b) {
   const hasPhoto = !!b.imageFileId;
   return `
     <div class="item-card ${b.hidden ? "hidden-item" : ""}">
-      <div class="thumb ${hasPhoto ? "" : "thumb-needs-photo"}">${hasPhoto ? `<img data-file-id="${b.imageFileId}" style="width:100%;height:100%;object-fit:cover;border-radius:10px;" alt="" />` : (b.emoji || "🔵")}</div>
+      <div class="thumb ${hasPhoto ? "" : "thumb-needs-photo"}">${hasPhoto ? `<img data-file-id="${b.imageFileId}" style="width:100%;height:100%;object-fit:cover;border-radius:10px;" alt="" />` : mvssSymbolFor(b.label) ? `<img src="${mvssSymbolFor(b.label)}" style="width:100%;height:100%;object-fit:contain;" alt="" />` : (b.emoji || "🔵")}</div>
       <div class="field"><label>Label</label><input type="text" value="${esc(b.label)}" data-action-change="editButtonField" data-cat="${cat.id}" data-btn="${b.id}" data-field="label" /></div>
       <div class="field"><label>Spoken phrase</label><input type="text" value="${esc(b.phrase)}" data-action-change="editButtonField" data-cat="${cat.id}" data-btn="${b.id}" data-field="phrase" /></div>
       <div class="field"><label>Emoji / symbol</label><input type="text" maxlength="4" value="${esc(b.emoji||"")}" data-action-change="editButtonField" data-cat="${cat.id}" data-btn="${b.id}" data-field="emoji" /></div>
       <label class="small-btn ${hasPhoto ? "" : "accent"}">${hasPhoto ? "🖼️ Change photo" : "📷 Add a real photo"}<input type="file" accept="image/*" hidden data-action-file="setButtonImage" data-cat="${cat.id}" data-btn="${b.id}" /></label>
-      ${!hasPhoto ? `<p style="color:#6b7280;font-size:13px;margin:6px 0 0;">Currently showing the ${b.emoji || "🔵"} symbol. A real photo of this exact item is usually easier for your child to recognise.</p>` : ""}
+      ${!hasPhoto ? `<p style="color:#6b7280;font-size:13px;margin:6px 0 0;">Currently showing ${mvssSymbolFor(b.label) ? "a picture symbol" : `the ${esc(b.emoji || "🔵")} emoji`}. A real photo of this exact item is usually easier for your child to recognise.</p>` : ""}
       ${b.audioFileId ? `<span class="tag">Has recorded voice</span>` : ""}
       <div class="row">
         ${recording
@@ -1445,6 +1445,7 @@ function renderTabAbout() {
       <p><strong>My Voice and Safe Space</strong> helps people with communication difficulties — including non-speaking and minimally-verbal children, and anyone who communicates better with pictures and voice than with typing or speech — be heard, in a space a parent or carer has built to keep them safe.</p>
       <p>It is an assistive communication aid and personal support tool. It is not a medical device, does not diagnose or infer emotions, and does not replace professional advice or an individually assessed communication system from a speech and language professional.</p>
       <p>It is not officially affiliated with PECS (Picture Exchange Communication System) or any other proprietary communication approach. It is designed to sit alongside a child's existing, individually assessed communication system where one is in place.</p>
+      <p style="color:#6b7280;font-size:14px;">Picture symbols on the communication board are from the <a href="https://mulberrysymbols.org" target="_blank" rel="noopener">Mulberry Symbol set</a> © Steve Lee, used under the <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">Creative Commons Attribution-ShareAlike 4.0</a> licence.</p>
       <p>Version 1.0 (MVP)</p>
     </div>`;
 }

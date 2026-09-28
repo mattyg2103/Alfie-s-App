@@ -1,4 +1,4 @@
-const CACHE_NAME = "mvss-cache-v4";
+const CACHE_NAME = "mvss-cache-v5";
 const APP_SHELL = [
   "./",
   "./index.html",

@@ -9,8 +9,7 @@ const MVSS_SYMBOLS = {
   "toilet": "toilet", "help": "help", "break": "break", "quiet": "quiet", "something hurts": "headache",
   "i feel unwell": "stomach-ache", "too loud": "loud", "too bright": "bright", "i need space": "relax",
   "football": "football", "water slides": "slide", "music": "music", "cartoons": "childrens-tv",
-  "happy": "happy", "sad": "sad", "angry": "angry", "worried": "worried", "excited": "excited",
-  "tired": "tired", "calm": "relax", "hi": "hello", "wait": "wait", "mum": "mum", "dad": "dad",
+  "hi": "hello", "wait": "wait", "mum": "mum", "dad": "dad",
   "family": "family", "well done": "good",
 };
 
