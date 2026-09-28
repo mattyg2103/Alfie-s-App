@@ -636,7 +636,7 @@ function esc(str) {
    ========================================================================= */
 function renderAuthScreen() {
   const authMode = AppState.authMode || "login";
-  return `<div class="screen"><div class="modal-overlay"><div class="modal-card">
+  return `<div class="screen standalone"><div class="modal-overlay"><div class="modal-card">
     <div class="auth-brand">
       <div class="auth-logo"><img src="icons/icon.svg" alt="My Voice and Safe Space logo" /></div>
       <div class="auth-name">My Voice and Safe Space</div>
@@ -659,7 +659,7 @@ function renderAuthScreen() {
 }
 
 function renderChildPicker() {
-  return `<div class="screen"><div class="modal-overlay"><div class="modal-card">
+  return `<div class="screen standalone"><div class="modal-overlay"><div class="modal-card">
     <h2>Choose a child profile</h2>
     <div class="item-list">
       ${AppState.children.map((c) => `
@@ -698,7 +698,7 @@ function renderOnboarding() {
       ${renderPinPad("onboardPinDigit", "onboardPinBackspace")}
       `;
   }
-  return `<div class="screen"><div class="modal-overlay"><div class="modal-card">${body}</div></div></div>`;
+  return `<div class="screen standalone"><div class="modal-overlay"><div class="modal-card">${body}</div></div></div>`;
 }
 
 function renderPinPad(digitAction, backspaceAction) {
@@ -748,10 +748,10 @@ function renderChildHome() {
   const sections = visibleSections();
   return `
     <div class="child-home">
-      <div class="greeting">Hi ${esc(AppState.child.name || "there")}! ${esc(AppState.child.emoji)}</div>
+      <div class="greeting"><span class="greeting-badge">${esc(AppState.child.emoji)}</span>Hi ${esc(AppState.child.name || "there")}!</div>
       <div class="child-home-tiles">
         ${sections.map(s => `
-          <button class="home-tile" data-action="childOpenSection" data-section="${s}">
+          <button class="home-tile home-tile-${s}" data-action="childOpenSection" data-section="${s}">
             <span class="emoji">${tiles[s].emoji}</span>
             <span>${esc(cfg.sectionLabels[s])}</span>
           </button>`).join("")}
@@ -762,7 +762,7 @@ function renderChildHome() {
 
 function homeButtonHtml() {
   if (AppState.childModeConfig.lockToSingleSection) return "";
-  return `<button class="icon-btn" data-action="childHome" aria-label="Home">🏠</button>`;
+  return `<button class="home-btn" data-action="childHome" aria-label="Home">🏠<span>Home</span></button>`;
 }
 
 function renderChildPhotosGrid() {
@@ -850,7 +850,7 @@ function renderChildVoice() {
       <span class="spacer"></span>
     </div>
     <div class="category-tabs">
-      ${cats.map(c => `<button class="category-tab ${activeCat === c.id ? "active" : ""}" data-action="childVoiceCategory" data-cat="${c.id}">${esc(c.name)}</button>`).join("")}
+      ${cats.map(c => `<button class="category-tab ${activeCat === c.id ? "active" : ""}" style="--cat:${esc(c.color || "#ff6b4a")}" data-action="childVoiceCategory" data-cat="${c.id}"><span class="cat-dot"></span>${esc(c.name)}</button>`).join("")}
     </div>
     ${AppState.settings.sentenceBuilderEnabled ? `
     <div class="sentence-bar">
@@ -861,7 +861,7 @@ function renderChildVoice() {
       <button class="pill-btn secondary" data-action="sentenceClear" ${strip.length===0?"disabled":""}>Clear</button>
       <button class="pill-btn" data-action="sentenceSpeak" ${strip.length===0?"disabled":""}>🔊 Speak</button>
     </div>` : ""}
-    <div class="grid" id="voiceGrid">
+    <div class="grid" id="voiceGrid" style="--cat:${esc((cat && cat.color) || "#ff6b4a")}">
       ${buttons.map(b => `
         <button class="tile-btn ${cat.priority ? "priority" : ""} ${AppState.settings.showText ? "" : "no-text"}" data-action="tapVoiceButton" data-cat="${cat.id}" data-btn="${b.id}" id="vb_${b.id}">
           ${b.imageFileId ? `<img class="tile-img" data-file-id="${b.imageFileId}" alt="" />` : `<div class="emoji">${esc(b.emoji || "🔵")}</div>`}
@@ -905,7 +905,7 @@ function renderChildWords() {
       <h2>${esc(AppState.childModeConfig.sectionLabels.words)}</h2>
       <span class="spacer"></span>
     </div>
-    <div class="grid">
+    <div class="grid" style="--cat:#10b981">
       ${items.map(w => `
         <button class="tile-btn ${AppState.settings.showText ? "" : "no-text"}" data-action="tapWordAction" data-id="${w.id}" id="wb_${w.id}">
           ${w.imageFileId ? `<img class="tile-img" data-file-id="${w.imageFileId}" alt="" />` : `<div class="emoji">${esc(w.emoji || "🔵")}</div>`}
