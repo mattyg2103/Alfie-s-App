@@ -46,7 +46,6 @@ function mvssDefaultVoiceCategories() {
       color: "#f59e0b",
       priority: false,
       buttons: [
-        mvssButton("Water", "Water, please.", "💧"),
         mvssButton("Drink", "I want a drink.", "🥤"),
         mvssButton("Snack", "I want a snack.", "🍪"),
         mvssButton("Crisps", "Crisps, please.", "🍟"),

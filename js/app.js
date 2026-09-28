@@ -62,10 +62,36 @@ function defaultState() {
     usageHistoryEnabled: false,
     usageHistory: [],
     hasLockedChildMode: false,
+    boardMigrations: [],
   };
 }
 
-const PROFILE_KEYS = ["child", "security", "settings", "childModeConfig", "photoCategories", "voiceCategories", "wordsActions", "usageHistoryEnabled", "usageHistory", "hasLockedChildMode"];
+const PROFILE_KEYS = ["child", "security", "settings", "childModeConfig", "photoCategories", "voiceCategories", "wordsActions", "usageHistoryEnabled", "usageHistory", "hasLockedChildMode", "boardMigrations"];
+
+// One-off changes to boards created from older defaults. Each runs once per
+// child profile; buttons a parent has personalised (photo or recording) are
+// left alone.
+const BOARD_MIGRATIONS = [
+  ["remove-default-water", (cats) => {
+    const food = cats.find((c) => c.id === "food");
+    if (!food) return;
+    food.buttons = food.buttons.filter((b) =>
+      !(String(b.label).trim().toLowerCase() === "water" && !b.imageFileId && !b.audioFileId));
+  }],
+];
+
+function applyBoardMigrations(state) {
+  const done = Array.isArray(state.boardMigrations) ? state.boardMigrations : [];
+  let changed = false;
+  BOARD_MIGRATIONS.forEach(([id, run]) => {
+    if (done.includes(id)) return;
+    run(state.voiceCategories || []);
+    done.push(id);
+    changed = true;
+  });
+  state.boardMigrations = done;
+  return changed;
+}
 
 const PROFILE_ICONS = ["🧒", "👦", "👧", "🧑", "😊", "🌟", "🚗", "⚽", "🎨", "🦖", "🐶", "🐱", "🦄", "🌈", "🚀", "🎵", "📚", "🧩", "⭐", "🎈"];
 
@@ -100,6 +126,8 @@ function loadState() {
     merged.security = Object.assign({}, base.security, saved.security || {});
     merged.account = Object.assign({}, base.account, saved.account || {});
     merged.children = Array.isArray(saved.children) ? saved.children : [];
+    merged.boardMigrations = Array.isArray(saved.boardMigrations) ? saved.boardMigrations : [];
+    applyBoardMigrations(merged);
     merged.activeChildId = saved.activeChildId || null;
     merged.sentenceStrip = [];
     merged.showUnlockModal = false;
@@ -191,7 +219,9 @@ function loadChildIntoProfile(child) {
   AppState.usageHistoryEnabled = data.usageHistoryEnabled || false;
   AppState.usageHistory = data.usageHistory || [];
   AppState.hasLockedChildMode = data.hasLockedChildMode || false;
+  AppState.boardMigrations = Array.isArray(data.boardMigrations) ? data.boardMigrations : [];
   AppState.activeChildId = child.id;
+  if (applyBoardMigrations(AppState)) schedulePushProfile();
 }
 
 function resetProfileFieldsForNewChild() {
