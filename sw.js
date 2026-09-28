@@ -1,4 +1,4 @@
-const CACHE_NAME = "mvss-cache-v5";
+const CACHE_NAME = "mvss-cache-v6";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -10,6 +10,7 @@ const APP_SHELL = [
   "./icons/icon.svg",
   "./assets/intro.mp4",
   "./assets/intro.webm",
+  "./assets/intro-poster.jpg",
 ];
 
 self.addEventListener("install", (event) => {

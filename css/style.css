@@ -215,9 +215,20 @@ img, video { -webkit-user-drag: none; user-select: none; }
 
 /* ---------- Intro video ---------- */
 .intro-screen {
-  align-items: center; justify-content: center; background: #0f172a; position: relative;
+  align-items: center; justify-content: center; background: #fdeee6; position: relative; gap: 18px;
 }
+.intro-rotate { display: none; margin: 0; color: #6b7280; font-size: 15px; font-weight: 600; text-align: center; padding: 0 20px; }
+@media (orientation: portrait) { .intro-rotate { display: block; } }
 .intro-video { width: 100%; max-width: 960px; max-height: 100%; }
+.intro-play {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  background: var(--accent); color: white; border: none; border-radius: 999px;
+  padding: 16px 32px; font-size: 20px; font-weight: 800; white-space: nowrap;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+}
+.intro-play small { font-size: 14px; font-weight: 600; opacity: 0.9; }
+.intro-play:active { transform: translate(-50%, -50%) scale(0.96); }
 .intro-skip {
   position: absolute;
   top: calc(18px + env(safe-area-inset-top, 0px));

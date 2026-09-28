@@ -619,10 +619,12 @@ function renderLoading() {
 function renderIntroVideo() {
   return `
     <div class="screen intro-screen">
-      <video id="intro-video" class="intro-video" autoplay muted playsinline>
+      <video id="intro-video" class="intro-video" playsinline preload="auto" poster="assets/intro-poster.jpg">
         <source src="assets/intro.webm" type="video/webm" />
         <source src="assets/intro.mp4" type="video/mp4" />
       </video>
+      <button class="intro-play" id="intro-play" data-action="introPlay">▶ Play the intro<small>1 minute, with sound</small></button>
+      <p class="intro-rotate">Tip: turn your phone sideways for a bigger picture.</p>
       <button class="pill-btn secondary intro-skip" data-action="introFinish">Skip</button>
     </div>`;
 }
@@ -1475,6 +1477,7 @@ function renderTabAbout() {
       <p><strong>My Voice and Safe Space</strong> helps people with communication difficulties — including non-speaking and minimally-verbal children, and anyone who communicates better with pictures and voice than with typing or speech — be heard, in a space a parent or carer has built to keep them safe.</p>
       <p>It is an assistive communication aid and personal support tool. It is not a medical device, does not diagnose or infer emotions, and does not replace professional advice or an individually assessed communication system from a speech and language professional.</p>
       <p>It is not officially affiliated with PECS (Picture Exchange Communication System) or any other proprietary communication approach. It is designed to sit alongside a child's existing, individually assessed communication system where one is in place.</p>
+      <p style="color:#6b7280;font-size:14px;">The intro video voiceover was generated with <a href="https://github.com/rhasspy/piper" target="_blank" rel="noopener">Piper</a> text-to-speech, using a voice trained on the <a href="https://www.openslr.org/83/" target="_blank" rel="noopener">OpenSLR 83</a> British English recordings (CC BY-SA 4.0).</p>
       <p style="color:#6b7280;font-size:14px;">Picture symbols on the communication board are from the <a href="https://mulberrysymbols.org" target="_blank" rel="noopener">Mulberry Symbol set</a> © Steve Lee, used under the <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">Creative Commons Attribution-ShareAlike 4.0</a> licence.</p>
       <p>Version 1.0 (MVP)</p>
     </div>`;
@@ -1952,6 +1955,17 @@ const Actions = {
   testVoice() { speakText("Hello! This is how my voice sounds."); },
 
   /* Intro video */
+  introPlay() {
+    // Started from a tap so the browser allows sound; no render() here, as
+    // that would rebuild (and reset) the video element.
+    const vid = document.getElementById("intro-video");
+    const btn = document.getElementById("intro-play");
+    if (!vid) return;
+    if (btn) btn.remove();
+    vid.muted = false;
+    vid.controls = true;
+    vid.play().catch(() => {});
+  },
   introFinish() {
     AppState.introSeen = true;
     saveState();
