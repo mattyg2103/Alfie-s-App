@@ -1,4 +1,24 @@
 // Default starter content. All of this is fully editable/removable in Parent Mode.
+
+// Picture symbols from the Mulberry Symbol set (CC BY-SA 4.0, Steve Lee —
+// see symbols/LICENSE.txt), keyed by lower-cased button label. Buttons with
+// no match here keep their emoji.
+const MVSS_SYMBOLS = {
+  "water": "water", "drink": "drink", "crisps": "crisps", "breakfast": "breakfast", "lunch": "lunch",
+  "dinner": "dinner", "more": "more", "finished": "finished", "hungry": "hungry", "thirsty": "thirsty",
+  "toilet": "toilet", "help": "help", "break": "break", "quiet": "quiet", "something hurts": "headache",
+  "i feel unwell": "stomach-ache", "too loud": "loud", "too bright": "bright", "i need space": "relax",
+  "football": "football", "water slides": "slide", "music": "music", "cartoons": "childrens-tv",
+  "happy": "happy", "sad": "sad", "angry": "angry", "worried": "worried", "excited": "excited",
+  "tired": "tired", "calm": "relax", "hi": "hello", "wait": "wait", "mum": "mum", "dad": "dad",
+  "family": "family", "well done": "good",
+};
+
+function mvssSymbolFor(label) {
+  const name = MVSS_SYMBOLS[String(label || "").trim().toLowerCase()];
+  return name ? "symbols/" + name + ".svg" : null;
+}
+
 function mvssUid(prefix) {
   return (prefix || "id") + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }

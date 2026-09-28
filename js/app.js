@@ -760,6 +760,13 @@ function renderChildHome() {
     </div>`;
 }
 
+function tileVisualHtml(item) {
+  if (item.imageFileId) return `<img class="tile-img" data-file-id="${item.imageFileId}" alt="" />`;
+  const symbol = mvssSymbolFor(item.label);
+  if (symbol) return `<img class="tile-img tile-symbol" src="${symbol}" alt="" />`;
+  return `<div class="emoji">${esc(item.emoji || "🔵")}</div>`;
+}
+
 function homeButtonHtml() {
   if (AppState.childModeConfig.lockToSingleSection) return "";
   return `<button class="home-btn" data-action="childHome" aria-label="Home">🏠<span>Home</span></button>`;
@@ -864,7 +871,7 @@ function renderChildVoice() {
     <div class="grid" id="voiceGrid" style="--cat:${esc((cat && cat.color) || "#ff6b4a")}">
       ${buttons.map(b => `
         <button class="tile-btn ${cat.priority ? "priority" : ""} ${AppState.settings.showText ? "" : "no-text"}" data-action="tapVoiceButton" data-cat="${cat.id}" data-btn="${b.id}" id="vb_${b.id}">
-          ${b.imageFileId ? `<img class="tile-img" data-file-id="${b.imageFileId}" alt="" />` : `<div class="emoji">${esc(b.emoji || "🔵")}</div>`}
+          ${tileVisualHtml(b)}
           <div class="label">${esc(b.label)}</div>
         </button>`).join("")}
     </div>
@@ -908,7 +915,7 @@ function renderChildWords() {
     <div class="grid" style="--cat:#10b981">
       ${items.map(w => `
         <button class="tile-btn ${AppState.settings.showText ? "" : "no-text"}" data-action="tapWordAction" data-id="${w.id}" id="wb_${w.id}">
-          ${w.imageFileId ? `<img class="tile-img" data-file-id="${w.imageFileId}" alt="" />` : `<div class="emoji">${esc(w.emoji || "🔵")}</div>`}
+          ${tileVisualHtml(w)}
           <div class="label">${esc(w.label)}</div>
         </button>`).join("")}
     </div>
