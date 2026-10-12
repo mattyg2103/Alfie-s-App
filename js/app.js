@@ -639,7 +639,7 @@ function renderIntroVideo() {
         <source src="assets/intro.webm" type="video/webm" />
         <source src="assets/intro.mp4" type="video/mp4" />
       </video>
-      <button class="intro-play" id="intro-play" data-action="introPlay">▶ Play the intro<small>1 minute, with sound</small></button>
+      <button class="intro-play" id="intro-play" data-action="introPlay">▶ Play the intro<small>1½ minutes, with sound</small></button>
       <p class="intro-rotate">Tip: turn your phone sideways for a bigger picture.</p>
       <button class="pill-btn secondary intro-skip" data-action="introFinish">Skip</button>
     </div>`;
