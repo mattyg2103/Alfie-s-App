@@ -24,12 +24,33 @@ function signToken(parent) {
   return jwt.sign({ sub: parent.id, email: parent.email }, JWT_SECRET, { expiresIn: "30d" });
 }
 
+// Password-reset links carry a short-lived JWT bound to a fingerprint of the
+// current password hash, so a link stops working as soon as it has been used
+// (the hash changes) without needing a tokens table.
+function passwordFingerprint(passwordHash) {
+  return crypto.createHash("sha256").update(passwordHash).digest("hex").slice(0, 32);
+}
+
+function signResetToken(parentId, passwordHash) {
+  return jwt.sign({ sub: parentId, purpose: "password-reset", fp: passwordFingerprint(passwordHash) }, JWT_SECRET, { expiresIn: "1h" });
+}
+
+function verifyResetToken(token) {
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    return payload.purpose === "password-reset" ? payload : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 function requireAuth(req, res, next) {
   const header = req.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
   if (!token) return res.status(401).json({ error: "Not signed in." });
   try {
     const payload = jwt.verify(token, JWT_SECRET);
+    if (payload.purpose) throw new Error("not a session token");
     req.parentId = payload.sub;
     req.parentEmail = payload.email;
     next();
@@ -40,4 +61,4 @@ function requireAuth(req, res, next) {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-module.exports = { hashPassword, verifyPassword, signToken, requireAuth, EMAIL_RE };
+module.exports = { hashPassword, verifyPassword, signToken, requireAuth, EMAIL_RE, passwordFingerprint, signResetToken, verifyResetToken };

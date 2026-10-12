@@ -1,9 +1,11 @@
 const express = require("express");
 const cors = require("cors");
 const { pool } = require("./db");
-const { hashPassword, verifyPassword, signToken, requireAuth, EMAIL_RE } = require("./auth");
+const { hashPassword, verifyPassword, signToken, requireAuth, EMAIL_RE, passwordFingerprint, signResetToken, verifyResetToken } = require("./auth");
+const { emailConfigured, sendPasswordResetEmail } = require("./mailer");
 
 const app = express();
+app.set("trust proxy", 1);
 app.use(express.json({ limit: "256kb" }));
 
 const allowedOrigins = (process.env.CORS_ORIGIN || "")
@@ -67,6 +69,70 @@ app.post("/api/auth/login", async (req, res) => {
   } catch (e) {
     console.error("login failed", e);
     res.status(500).json({ error: "Could not sign in. Please try again." });
+  }
+});
+
+/* ---------------- Password reset ---------------- */
+
+const allowedOriginsForLinks = (process.env.CORS_ORIGIN || "").split(",").map((s) => s.trim()).filter(Boolean);
+const APP_URL = (process.env.APP_URL || allowedOriginsForLinks[0] || "https://my-voice-safe-space.onrender.com").replace(/\/+$/, "");
+
+// Simple in-memory limits so the form can't be used to flood someone's inbox.
+const resetAttempts = new Map();
+function tooManyResetRequests(key, max) {
+  const now = Date.now();
+  const recent = (resetAttempts.get(key) || []).filter((t) => now - t < 60 * 60 * 1000);
+  recent.push(now);
+  resetAttempts.set(key, recent);
+  return recent.length > max;
+}
+
+app.post("/api/auth/forgot", async (req, res) => {
+  if (!emailConfigured) {
+    return res.status(503).json({ error: "Password reset by email isn't switched on yet. Please contact the app's owner." });
+  }
+  const { email } = req.body || {};
+  if (typeof email !== "string" || !EMAIL_RE.test(email.trim())) {
+    return res.status(400).json({ error: "Please enter a valid email address." });
+  }
+  const normalizedEmail = email.trim().toLowerCase();
+  if (tooManyResetRequests("ip:" + req.ip, 10) || tooManyResetRequests("email:" + normalizedEmail, 3)) {
+    return res.status(429).json({ error: "Too many reset requests. Please wait a while and try again." });
+  }
+  // Always answer the same way, so this can't be used to find out who has an account.
+  const done = () => res.json({ ok: true });
+  try {
+    const result = await pool.query("SELECT id, email, password_hash FROM parents WHERE email = $1", [normalizedEmail]);
+    const row = result.rows[0];
+    if (!row) return done();
+    const link = `${APP_URL}/?reset=${encodeURIComponent(signResetToken(row.id, row.password_hash))}`;
+    await sendPasswordResetEmail(row.email, link);
+    done();
+  } catch (e) {
+    console.error("forgot password failed", e);
+    res.status(500).json({ error: "Could not send the reset email. Please try again." });
+  }
+});
+
+app.post("/api/auth/reset", async (req, res) => {
+  const { token, password } = req.body || {};
+  const payload = typeof token === "string" ? verifyResetToken(token) : null;
+  const expired = { error: "This reset link has expired or has already been used. Please ask for a new one." };
+  if (!payload) return res.status(400).json(expired);
+  if (typeof password !== "string" || password.length < 8) {
+    return res.status(400).json({ error: "Password must be at least 8 characters." });
+  }
+  try {
+    const result = await pool.query("SELECT id, email, password_hash FROM parents WHERE id = $1", [payload.sub]);
+    const row = result.rows[0];
+    if (!row || passwordFingerprint(row.password_hash) !== payload.fp) return res.status(400).json(expired);
+    const { hash, salt } = hashPassword(password);
+    await pool.query("UPDATE parents SET password_hash = $1, password_salt = $2 WHERE id = $3", [hash, salt, row.id]);
+    const parent = { id: row.id, email: row.email };
+    res.json({ token: signToken(parent), parent });
+  } catch (e) {
+    console.error("reset password failed", e);
+    res.status(500).json({ error: "Could not reset the password. Please try again." });
   }
 });
 

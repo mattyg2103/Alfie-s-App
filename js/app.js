@@ -101,6 +101,8 @@ let pinFailCount = 0;
 let lastSelectionTs = 0;
 let parentAccessTapTimes = [];
 let booting = false;
+// Kept out of AppState so a password-reset token is never written to localStorage.
+let pendingResetToken = null;
 let profilePushTimer = null;
 
 function loadState() {
@@ -132,6 +134,8 @@ function loadState() {
     merged.sentenceStrip = [];
     merged.showUnlockModal = false;
     merged.showDeleteAccountModal = false;
+    merged.authNotice = "";
+    if (merged.authMode === "reset") merged.authMode = "login";
     // The actual mode (auth / picker / onboard-child / child / parent) is
     // decided by boot(), which re-checks the account with the server.
     return merged;
@@ -192,6 +196,8 @@ async function apiRequest(path, options) {
 
 const apiRegister = (email, password) => apiRequest("/api/auth/register", { method: "POST", body: JSON.stringify({ email, password }) });
 const apiLogin = (email, password) => apiRequest("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+const apiForgotPassword = (email) => apiRequest("/api/auth/forgot", { method: "POST", body: JSON.stringify({ email }) });
+const apiResetPassword = (token, password) => apiRequest("/api/auth/reset", { method: "POST", body: JSON.stringify({ token, password }) });
 const apiDeleteAccount = () => apiRequest("/api/auth/me", { method: "DELETE" });
 const apiListChildren = () => apiRequest("/api/children").then((r) => r.children);
 const apiCreateChild = (name, data) => apiRequest("/api/children", { method: "POST", body: JSON.stringify({ name, data }) }).then((r) => r.child);
@@ -251,6 +257,16 @@ async function flushProfilePush() {
    BOOT — decides auth / picker / onboarding / child / parent on launch
    ========================================================================= */
 async function boot() {
+  const resetToken = new URLSearchParams(location.search).get("reset");
+  if (resetToken) {
+    pendingResetToken = resetToken;
+    history.replaceState(null, "", location.pathname);
+    AppState.mode = "auth";
+    AppState.authMode = "reset";
+    AppState.authError = "";
+    render();
+    return;
+  }
   if (!AppState.introSeen) {
     AppState.mode = "intro";
     render();
@@ -674,11 +690,13 @@ function renderAuthScreen() {
       <div class="auth-name">My Voice and Safe Space</div>
       <p class="auth-slogan">Helping people with communication difficulties be heard, in a space built to keep them safe.</p>
     </div>
+    ${authMode === "forgot" ? renderForgotPasswordForm() : authMode === "reset" ? renderResetPasswordForm() : `
     <h2>${authMode === "login" ? "Sign in" : "Create your parent account"}</h2>
     ${authMode === "register" ? `<p style="color:#6b7280;font-size:14px;">My Voice and Safe Space helps people with communication difficulties be heard, in a space built to keep them safe. It does not replace professional advice or an individually assessed communication system, and it is not officially affiliated with PECS. Your account and each child's board/settings sync securely so you can sign in on other devices. Photos, videos and voice recordings always stay only on the device that captured them.</p>` : ""}
     ${AppState.authError ? `<div class="banner">${esc(AppState.authError)}</div>` : ""}
     <div class="field"><label for="auth-email">Email</label><input id="auth-email" type="email" autocomplete="username" value="${esc(AppState.authEmail || "")}" /></div>
     <div class="field"><label for="auth-password">Password</label><input id="auth-password" type="password" autocomplete="${authMode === "login" ? "current-password" : "new-password"}" /></div>
+    ${authMode === "login" ? `<p style="text-align:right;margin:-6px 0 14px;"><button type="button" class="link-btn" data-action="authSwitchMode" data-mode="forgot">Forgot password?</button></p>` : ""}
     ${AppState.authBusy
       ? `<p>Please wait…</p>`
       : `<button class="pill-btn" style="width:100%;" data-action="authSubmit">${authMode === "login" ? "Sign in" : "Create account"}</button>`}
@@ -686,8 +704,39 @@ function renderAuthScreen() {
       ${authMode === "login"
         ? `New here? <button type="button" class="link-btn" data-action="authSwitchMode" data-mode="register">Create an account</button>`
         : `Already have an account? <button type="button" class="link-btn" data-action="authSwitchMode" data-mode="login">Sign in</button>`}
-    </p>
+    </p>`}
   </div></div></div>`;
+}
+
+function renderForgotPasswordForm() {
+  if (AppState.authNotice) {
+    return `
+      <h2>Check your email</h2>
+      <p>${esc(AppState.authNotice)}</p>
+      <button class="pill-btn" style="width:100%;" data-action="authSwitchMode" data-mode="login">Back to sign in</button>`;
+  }
+  return `
+    <h2>Reset your password</h2>
+    <p style="color:#6b7280;font-size:15px;">Enter the email you signed up with and we'll send you a link to choose a new password.</p>
+    ${AppState.authError ? `<div class="banner">${esc(AppState.authError)}</div>` : ""}
+    <div class="field"><label for="auth-email">Email</label><input id="auth-email" type="email" autocomplete="username" value="${esc(AppState.authEmail || "")}" /></div>
+    ${AppState.authBusy
+      ? `<p>Please wait…</p>`
+      : `<button class="pill-btn" style="width:100%;" data-action="authForgotSubmit">Send reset link</button>`}
+    <p style="text-align:center;margin-top:14px;"><button type="button" class="link-btn" data-action="authSwitchMode" data-mode="login">Back to sign in</button></p>`;
+}
+
+function renderResetPasswordForm() {
+  return `
+    <h2>Choose a new password</h2>
+    <p style="color:#6b7280;font-size:15px;">At least 8 characters. You'll be signed in straight away.</p>
+    ${AppState.authError ? `<div class="banner">${esc(AppState.authError)}</div>` : ""}
+    <div class="field"><label for="reset-password">New password</label><input id="reset-password" type="password" autocomplete="new-password" /></div>
+    <div class="field"><label for="reset-password2">Type it again</label><input id="reset-password2" type="password" autocomplete="new-password" /></div>
+    ${AppState.authBusy
+      ? `<p>Please wait…</p>`
+      : `<button class="pill-btn" style="width:100%;" data-action="authResetSubmit">Save new password</button>`}
+    <p style="text-align:center;margin-top:14px;"><button type="button" class="link-btn" data-action="authSwitchMode" data-mode="forgot">Send me a new link</button></p>`;
 }
 
 function renderChildPicker() {
@@ -1489,9 +1538,52 @@ function renderTabAbout() {
 const Actions = {
   /* Account auth */
   authSwitchMode(el) {
+    const emailEl = document.getElementById("auth-email");
+    if (emailEl) AppState.authEmail = emailEl.value.trim();
     AppState.authMode = el.dataset.mode;
     AppState.authError = "";
+    AppState.authNotice = "";
     render();
+  },
+  async authForgotSubmit() {
+    const email = document.getElementById("auth-email").value.trim();
+    AppState.authEmail = email;
+    if (!email) { AppState.authError = "Please enter your email."; render(); return; }
+    AppState.authBusy = true; AppState.authError = ""; render();
+    try {
+      await apiForgotPassword(email);
+      AppState.authNotice = `If there's an account for ${email}, we've sent it a link to reset the password. It works for 1 hour — check your spam folder if it hasn't arrived in a few minutes.`;
+    } catch (e) {
+      AppState.authError = e.offline ? "You appear to be offline. Please connect to the internet and try again." : e.message;
+    }
+    AppState.authBusy = false;
+    render();
+  },
+  async authResetSubmit() {
+    const pw = document.getElementById("reset-password").value;
+    const pw2 = document.getElementById("reset-password2").value;
+    if (pw.length < 8) { AppState.authError = "Password must be at least 8 characters."; render(); return; }
+    if (pw !== pw2) { AppState.authError = "The two passwords don't match."; render(); return; }
+    if (!pendingResetToken) { AppState.authError = "This reset link is no longer valid. Please ask for a new one."; render(); return; }
+    AppState.authBusy = true; AppState.authError = ""; render();
+    try {
+      const result = await apiResetPassword(pendingResetToken, pw);
+      pendingResetToken = null;
+      if (AppState.account.email !== result.parent.email) {
+        AppState.activeChildId = null;
+        AppState.children = [];
+        resetProfileFieldsForNewChild();
+      }
+      AppState.account = { token: result.token, email: result.parent.email };
+      AppState.introSeen = true;
+      AppState.authMode = "login";
+      AppState.authBusy = false;
+      await bootAfterAuth();
+    } catch (e) {
+      AppState.authBusy = false;
+      AppState.authError = e.offline ? "You appear to be offline. Please connect to the internet and try again." : e.message;
+      render();
+    }
   },
   async authSubmit() {
     const email = document.getElementById("auth-email").value.trim();

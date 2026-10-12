@@ -112,12 +112,18 @@ static site above:
    - `JWT_SECRET` — any long random string (e.g. `openssl rand -hex 32`).
    - `CORS_ORIGIN` — the static site's URL, e.g.
      `https://my-voice-safe-space.onrender.com`.
+   - `SMTP_HOST`, `SMTP_PORT` (usually 587), `SMTP_USER`, `SMTP_PASS`,
+     and optionally `EMAIL_FROM` — any email account that can send over
+     SMTP (Gmail with an app password, Outlook, Brevo, ...). Used only for
+     "Forgot password?" reset links; until these are set, the app tells
+     people that password reset isn't switched on yet. Reset links point at
+     `APP_URL`, defaulting to the first `CORS_ORIGIN`.
 5. Update `API_BASE` at the top of `js/app.js` to match this service's
    Render URL if you name it something other than
    `my-voice-safe-space-api`.
 
 The API has no other secrets or third-party dependencies — just Express,
-`pg`, `jsonwebtoken` and `cors`.
+`pg`, `jsonwebtoken`, `cors` and `nodemailer`.
 
 ## What's implemented (MVP)
 
